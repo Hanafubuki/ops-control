@@ -41,6 +41,118 @@ On its first start Ops Control copies your packs, themes, pets and name packs fr
 
 These need a few lines in `~/.claude/keybindings.json`; see [Ops Control's README](plugins/ops-control/README.md#keyboard).
 
+## The tabs (Ops Control)
+
+The pane docks beside the transcript in fullscreen on a wide terminal (144 columns, or 110 once you have opened it). On a narrower one, `/ops pane` opens it as a drawer above the prompt. Its seven tabs, in order (Alt+1 … Alt+7):
+
+| # | Tab | What it shows | What you can do there |
+|---|---|---|---|
+| 1 | **Plan** | Every request you made this session, newest on top, with its status, then Claude's task list. | Open a request to see its objective, its milestones, what was done, its **issues** (tool calls that failed or were refused and aren't fixed yet), and the questions and action items left for you. Requests made before Ops Control loaded are read back from the transcript. |
+| 2 | **Context** | How full the context window is: a bar split by what fills it, a chart over the session, the turns left before auto-compact, and the heaviest sources you could trim. Below that, **CPU and RAM** (Linux, WSL and macOS, refreshed every 3 seconds while the tab is open) and your **5-hour and weekly** plan usage with reset times (or this session's cost on an API key). | Read only. |
+| 3 | **Guardrails** | The rules the project gives agents: CLAUDE.md, AGENTS.md, GUARDRAILS.md, `.claude/rules`, `.claude/agents`, skills, `agent_rules` and Cursor rules. A project with none shows a default set (ask before installs, pushes and deploys; never force push). | Read only. Ops Control shows the rules; it doesn't enforce them. |
+| 4 | **Agents** | The main session first (`★`), then every subagent with its time, tokens and current step, named after the active pack's cast. | Open one for its detail view: what it was asked, a **Context** meter for its own window, its **Milestones**, what it is doing **Now** and its latest **Steps**. `‹ All agents` (or `q`) goes back. |
+| 5 | **Diff** | The files Claude edited or created, newest first, with added and removed line counts, and their changes as hunks. A commit removes the committed files. | Read only. |
+| 6 | **Music** | What is playing on your machine (any player on Linux; Windows media sessions on Windows and WSL; `media-control` or Spotify on macOS), with a progress bar. | Prev / Pause / Next (`r`, `p`, `n`). While music plays the pet dances. |
+| 7 | **Settings** | The controls below. | Each control is reached with ↑/↓ and pressed with Enter. |
+
+**Settings controls:**
+
+| Control | What it does |
+|---|---|
+| **Open board** (`b`) | Starts the Sidequest board if it isn't running and opens it in your browser. |
+| **Theme** (dropdown, e.g. `Arcade ▾`) | Picks the colour theme. Sidequest's palettes come first (Arcade, Clean, Tokyo Night, four Catppuccin flavours), then Ops Control's own themes and yours. |
+| **Package** (dropdown, e.g. `Code Geass ▾`) | Picks the name pack: how the main session and subagents are named, and which character the pet shows. Its last entry, **+ Create pack…**, makes a new one (see below). |
+| **Character** (`c`, `Shown · Hide` / `Hidden · Show`) | Shows or hides the pet. |
+
+A dropdown opens and closes with Enter (or a click). While it is open, ↑/↓ move only through its options, and nothing changes until you press Enter on one.
+
+Above the prompt, the **work bar** shows what Claude is doing toward the current milestone, the milestones as a track (`●━●━◉─○─○ 2/5`), the context meter and the 5-hour limit. When you open a subagent's transcript, the bar shows that subagent's own milestones and context.
+
+## Packs (Ops Control)
+
+Ops Control has two kinds of pack. They are unrelated and live in different folders:
+
+| | **Package** (name pack) | **Look pack** |
+|---|---|---|
+| Sets | the main session's name, the subagents' names, the pet's character | colours, transcript row styles, borders, spinner, motion |
+| Folder | `~/.claude/ops-control/namepacks/<id>.json` | `~/.claude/ops-control/packs/<name>.json` |
+| Pick it with | Settings → **Package** | `/ops pack <name>` |
+
+If `CLAUDE_CONFIG_DIR` is set, both folders are under it instead of `~/.claude`.
+
+### Set a package
+
+Open the pane, press **Alt+7** (Settings), go down to **Package**, press Enter, pick one with ↑/↓ and press Enter. The built-in packages:
+
+| Package | Main session | Pet | Cast |
+|---|---|---|---|
+| Default | Main session | your own pet | none: agents keep their own names |
+| Code Geass | Lelouch | lelouch | 37 names (C.C., Suzaku, Rolo…) |
+| Naruto | Shikamaru | shikamaru | 39 names (Naruto, Sasuke…) |
+| Jujutsu Kaisen | Gojo | gojo | 35 names (Yuji, Megumi…) |
+| Attack on Titan | Levi | levi | 37 names (Eren, Armin…) |
+
+Each new subagent gets the next unused name in the cast and keeps it for the session, even if you switch packages. When the cast runs out, names come round again with a numeral ("Suzaku II"). A new session starts from the top of the cast.
+
+### Create a package: the easy way
+
+1. In Settings, open **Package** and choose **+ Create pack…**.
+2. Describe it, for example `One Piece, Luffy leads`, and press **create**.
+3. Ops Control asks Sonnet for a name, the lead and a cast of 24–40 names, then asks Opus to draw the lead as a 24×12 pixel pet. It saves the package to `~/.claude/ops-control/namepacks/<id>.json` and the pet to `~/.claude/ops-control/pets/<id>.json`, and switches to it.
+4. If the pet can't be drawn, the package is still saved and your own pet stays.
+
+These are ordinary model calls on your account.
+
+### Create a package: by hand
+
+Save a file such as `~/.claude/ops-control/namepacks/one-piece.json`:
+
+```json
+{
+  "format": 1,
+  "id": "one-piece",
+  "label": "One Piece",
+  "main": "Luffy",
+  "pet": "luffy",
+  "description": "The Straw Hat crew",
+  "cast": ["Zoro", "Nami", "Usopp", "Sanji", "Chopper", "Robin", "Franky", "Brook"]
+}
+```
+
+| Field | Required | Rules |
+|---|---|---|
+| `format` | yes | must be `1` |
+| `id` | yes | lowercase letters, digits and dashes, starting with a letter or digit, at most 40 characters; not a built-in package's id. Use the file name. |
+| `label` | yes | the name shown in the Package list; cut to 40 characters |
+| `main` | yes | the main session's name; cut to 30 characters |
+| `cast` | yes | the subagent names in order: **at least 8**, anything past 60 is dropped, each cut to 30 characters; duplicates and the `main` name are removed |
+| `pet` | no | the character to show: a built-in pet (`clawd`, `robot`, `ghost`, `lelouch`, `shikamaru`, `gojo`, `levi`) or a pet file in `~/.claude/ops-control/pets/`. Leave it out to keep your own pet. |
+| `description` | no | a note for yourself; cut to 400 characters |
+
+Comments (`//`) are allowed. A file that breaks a rule is skipped without a message, so if your package doesn't show up in the list, check it against this table. Reopen the Settings tab, or run `/reload-plugins`, to pick it up.
+
+### Create a look pack
+
+A look pack can `extends` another and list only what it changes:
+
+```json
+{
+  "format": 1,
+  "name": "arcade-soft",
+  "extends": "arcade",
+  "description": "arcade, less pink",
+  "colors": { "palette": { "accent": "#d46fb0" } }
+}
+```
+
+Save it as `~/.claude/ops-control/packs/arcade-soft.json` (the `name` must match the file name and can't be `classic`, `crt`, `cozy` or `arcade`), then:
+
+```text
+/ops pack arcade-soft
+```
+
+The easiest way to make one is to ask Claude, for example "make me an Ops Control pack from this palette" or "make arcade less pink"; the bundled `ops-control-pack` skill writes the file. `/ops import <file>` turns a Ghostty or base16 colour scheme into a pack. Every field is listed in [the pack reference](plugins/ops-control/docs/pack-reference.md).
+
 ## What else is here
 
 | Path | What it is |
