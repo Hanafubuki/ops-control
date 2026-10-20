@@ -55,6 +55,10 @@ test('cards: the frame and the bar lie over the engine row, so its blank margin 
   const l = look('arcade')
   const f = frame(styleRow(els, l, tool(), ENGINE)).props
   expect([f.top, f.bottom, f.left, f.right]).toEqual([0, 0, 0, 0])
+  // the frame comes before the row, so a row that opens without the blank line draws its title over the top edge
+  const card = inner(styleRow(els, l, tool(), ENGINE)) as any
+  const order = card.children.map((c: any) => (c?.props?.borderStyle ? 'frame' : hasEngine(c) ? 'row' : 'other'))
+  expect(order.indexOf('frame')).toBeLessThan(order.indexOf('row'))
   const b = walk(styleRow(els, look('cozy'), user(), ENGINE)).find(x => x.props?.position === 'absolute').props
   // the bar starts a line down, beside the text and not on the margin line
   expect([b.top, b.bottom, b.left, b.width, b.overflow]).toEqual([1, 0, 0, 1, 'hidden'])

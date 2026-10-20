@@ -53,10 +53,12 @@ function card({ Box, Text }: Els, look: Look, direction: 'row' | 'column', kids:
       </Box>
     )
   }
+  // The frame is drawn first and the row over it: a row that opens without the blank line (a tool call after another
+  // block of the same reply) then writes its title across the top edge instead of having the edge cover it.
   return (
     <Box flexDirection={direction} paddingX={2} paddingBottom={1}>
-      {kids}
       <Box position="absolute" top={0} bottom={0} left={0} right={0} borderStyle={look.border} borderColor={color} />
+      {kids}
     </Box>
   )
 }
