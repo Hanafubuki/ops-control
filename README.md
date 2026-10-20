@@ -2,6 +2,8 @@
 
 ![Ops Control in Claude Code: the transcript on the left with the work bar over the prompt (6 of 6 milestones done, context 18%, 5-hour limit 35%), and the Ops Control pane on the right on its Plan tab, listing four requests, above the status box with the HP bar, the level and the pet](docs/ops-control.png)
 
+![The Sidequest board in its arcade restyle: the sidebar with Claude sessions, All boards and the four projects, and the To do, Doing and Done columns with two high-priority importer tickets in To do](docs/sidequest-board.png)
+
 A Claude Code plugin marketplace with three plugins that work together. **Requires Claude Code 2.1.289 or later; tested with Claude Code 2.1.304** on Linux, WSL and macOS. By [Hanafubuki](https://github.com/Hanafubuki), MIT licensed.
 
 | Plugin | What it is | Based on |
@@ -9,6 +11,21 @@ A Claude Code plugin marketplace with three plugins that work together. **Requir
 | [**Ops Control**](plugins/ops-control) | A cockpit pane beside the transcript (Plan, Context, Guardrails, Agents, Diff, Music, Settings), a work bar over the prompt with milestones and context, **interactive guardrails** you switch on and off, name packs and pets, `/opstask` and `/opspin`, and keyboard navigation | [glowup](https://github.com/NovusEdge/glowup) v1.2.0 by Aliasgar Khimani |
 | [**Sidequest**](plugins/sidequest) | A local work board and orchestration loop for Claude Code, here with the arcade dashboard restyle, a Claude sessions page and comment edit/delete | [Sidequest](https://github.com/Eigenwise/eigenwise-toolshed/tree/main/plugins/sidequest) v6.0.2 by Eigenwise |
 | [**prismantis**](plugins/prismantis) | Colorful, themeable rendering of Claude's replies: tables, headings, code, diagrams | [prismantis](https://github.com/NahumLitvin/prismantis) v0.31.1 by Nahum Litvin |
+
+## Contents
+
+- [Install](#install)
+- [Keyboard (Ops Control)](#keyboard-ops-control)
+- [The tabs (Ops Control)](#the-tabs-ops-control)
+- [Guardrails (Ops Control)](#guardrails-ops-control)
+- [Packs (Ops Control)](#packs-ops-control)
+  - [Set a package](#set-a-package)
+  - [Create a package: the easy way](#create-a-package-the-easy-way)
+  - [Create a package: by hand](#create-a-package-by-hand)
+  - [Create a look pack](#create-a-look-pack)
+- [Versions](#versions)
+- [What else is here](#what-else-is-here)
+- [Licences](#licences)
 
 ## Install
 
