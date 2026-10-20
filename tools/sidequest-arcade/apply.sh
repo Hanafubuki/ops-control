@@ -13,7 +13,9 @@
 set -uo pipefail
 
 ROOT="${SIDEQUEST_ARCADE_ROOT:-$HOME/.claude/sidequest-arcade}"
-CACHE="${SIDEQUEST_ARCADE_CACHE:-$HOME/.claude/plugins/cache/eigenwise-toolshed/sidequest}"
+# Sidequest from the ops-control marketplace, and from Eigenwise's where it is still installed.
+CACHES="${SIDEQUEST_ARCADE_CACHE:-$HOME/.claude/plugins/cache/ops-control/sidequest $HOME/.claude/plugins/cache/eigenwise-toolshed/sidequest}"
+CACHE="${CACHES%% *}"
 MARKED_VERSION="18.1.0"
 MARKER=".sidequest-arcade"
 # The Sessions page reads what ~/.claude/sidequest-sessions/build.mjs writes, through this link in each installed dist.
@@ -55,7 +57,7 @@ clear_failure() {
 # Installed versions with a dashboard, oldest first.
 versions() {
 	local directory
-	for directory in $(ls -d "$CACHE"/*/ 2>/dev/null | sort -V); do
+	for directory in $(for cache in $CACHES; do ls -d "$cache"/*/ 2>/dev/null; done | sort -V); do
 		directory="${directory%/}"
 		[ -f "$directory/dashboard/dist/index.html" ] && [ -d "$directory/dashboard/app" ] && printf '%s\n' "$directory"
 	done
