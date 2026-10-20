@@ -2,7 +2,7 @@
 
 ![Ops Control in Claude Code: the transcript on the left with the work bar over the prompt (6 of 6 milestones done, context 18%, 5-hour limit 35%), and the Ops Control pane on the right on its Plan tab, listing four requests, above the status box with the HP bar, the level and the pet](docs/ops-control.png)
 
-A Claude Code plugin marketplace with three plugins that work together:
+A Claude Code plugin marketplace with three plugins that work together. **Requires Claude Code 2.1.289 or later; tested with Claude Code 2.1.304** on Linux, WSL and macOS. By [Hanafubuki](https://github.com/Hanafubuki), MIT licensed.
 
 | Plugin | What it is | Based on |
 |---|---|---|

@@ -7,7 +7,7 @@ A Claude Code mod that adds a side pane for changed files, subagents and context
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-2.1.289%2B-d77757)](docs/install.md)
 
-Based on [glowup](https://github.com/NovusEdge/glowup) by Aliasgar Khimani (MIT). Part of the [ops-control](https://github.com/Hanafubuki/ops-control) marketplace, with Sidequest and prismantis.
+By [Hanafubuki](https://github.com/Hanafubuki), MIT licensed. Based on [glowup](https://github.com/NovusEdge/glowup) by Aliasgar Khimani (MIT). Tested with Claude Code 2.1.304. Part of the [ops-control](https://github.com/Hanafubuki/ops-control) marketplace, with Sidequest and prismantis.
 
 </div>
 
@@ -108,7 +108,7 @@ While Claude or a subagent is working, Ops Control adds an entry under the promp
 
 ## Install
 
-Ops Control needs Claude Code 2.1.289 or later. From inside Claude Code:
+Ops Control needs Claude Code 2.1.289 or later and is tested with Claude Code 2.1.304. From inside Claude Code:
 
 ```text
 /plugin marketplace add Hanafubuki/ops-control
