@@ -9,7 +9,7 @@ import type { Border, Look } from './packs.ts'
 import { wrapBubble } from './bubbles.ts'
 import type { BubbleMood } from './lines.ts'
 import { CLAWD_ROW, PET_ROWS, type PetId } from './pets.ts'
-import { comboSegs, fit, hearts, hpBar, levelSegs, renderSegs, toneColor, visibleLength, type Seg } from './layout.tsx'
+import { comboSegs, fit, hpBar, levelSegs, renderSegs, toneColor, visibleLength, type Seg } from './layout.tsx'
 import { liveLimit } from './fields.ts'
 import { DEFAULT_SETUP, toneFor, type Meter, type TabId } from './setup.ts'
 import type { DiffLine, Diffs } from './diff.ts'
@@ -655,7 +655,7 @@ export const tabRows = (...a: Parameters<typeof tabParts>): Seg[][] => tabParts(
 
 // The pet's life is the tighter of the 5-hour and weekly windows. API-key sessions report no windows, so they
 // show what the session has spent; context is the last resort because the CONTEXT box already shows it.
-function lifeRow(m: Model, t: Theme, width: number, now: number, look?: Look): Seg[] {
+function lifeRow(m: Model, t: Theme, width: number, now: number): Seg[] {
   const c = t.colors
   const windows = [['five_hour', '5h limit'], ['seven_day', 'weekly limit']] as const
   const tight = windows.flatMap(([kind, what]) => {
@@ -664,7 +664,8 @@ function lifeRow(m: Model, t: Theme, width: number, now: number, look?: Look): S
   }).sort((a, b) => b.used - a.used)[0]
   if (!tight && m.costUsd !== undefined) return [{ text: `$${m.costUsd.toFixed(2)}`, color: c.text }, { text: ' spent this session', color: c.dim }]
   const { used, what } = tight ?? { used: m.ctxPercent, what: 'context' }
-  return look?.extras.hp ? hpBar(used, t, width, what) : [...hearts(used, t), { text: `  ${what} ${100 - used}% left`, color: c.dim }]
+  // every look draws the life bar; only the band keeps hearts, where a bar has no room
+  return hpBar(used, t, width, what)
 }
 
 // meter: a renderer plugin's rows (ops.meter), drawn in place of the life row; names: the name pack's names by agent key.
@@ -677,7 +678,7 @@ export function statusRows(model: Model, base: Theme, width: number, now: number
   const withLevel = m.xp === undefined ? first : [...first, { text: '  ', color: c.text }, ...levelSegs(m.xp, t, 10)]
   const rows: Seg[][] = [
     visibleLength(withLevel) <= width ? withLevel : first,
-    ...(meter ?? [lifeRow(m, t, width, now, look)]),
+    ...(meter ?? [lifeRow(m, t, width, now)]),
   ]
   if (live.length) rows.push([{ text: `◆ ${live.map(a => names?.[a.key] ?? a.name).join(', ')} working`, color: c.agent }])
   return rows.map(r => fit(r, width))

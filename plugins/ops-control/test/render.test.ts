@@ -92,3 +92,25 @@ test('reduced motion: stock spinner, no Client anywhere', async ($, on) => {
   expect(walk(await spin.drawn()).some(n => n?.type === 'Client')).toBe(false)
   await spin.unmount()
 })
+
+test('a file change folds its diff away until its toggle is pressed; ctrl+o shows it anyway', { timeoutMs: 20000 }, async ($, on) => {
+  base(on)
+  on('ui.invalidate', async () => ({ value: undefined }) as never)
+  await runOpsControl($, 'pack arcade')
+  const EDIT = { ...TOOL, tool_use_id: 'e1', tool: 'Edit', input: { file_path: '/r/a.ts', old_string: 'a', new_string: 'b' } }
+  const RESULT = { tool_use_id: 'e1', tool: 'Edit', output: {}, isErrored: false }
+  const result = async (props: object) => {
+    const r = await $.ui.mount({ plugin: 'ops-control', surface: 'terminal', component: 'ToolResult', requestId: 'e1', props: props as never })
+    const shown = (await r.find({ text: /engine row/ })) !== undefined
+    await r.unmount()
+    return shown
+  }
+  const row = await $.ui.mount({ plugin: 'ops-control', surface: 'terminal', component: 'ToolUse', requestId: 'e1', props: EDIT as never })
+  expect(await result(RESULT)).toBe(false)
+  expect(await result({ ...RESULT, isExpanded: true })).toBe(true)
+  await row.press({ key: 'changes:e1' })
+  expect(await result(RESULT)).toBe(true)
+  await row.press({ key: 'changes:e1' })
+  expect(await result(RESULT)).toBe(false)
+  await row.unmount()
+})

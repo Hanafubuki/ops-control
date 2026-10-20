@@ -156,7 +156,7 @@ test('the tabs carry the actions F1-F7 are bound to, first tab first', async ($,
   await pane.unmount()
 })
 
-test('the message a finished turn answered with is drawn under a Conclusion header; an earlier one gets the grey rule', async ($, on) => {
+test('the message a finished turn answered with opens a box titled Conclusion; an earlier one opens a plain box', async ($, on) => {
   base(on, { mix: { colors: 'arcade', motion: 'arcade' } })
   on('prompt.submit', async (_$: unknown, e: any) => ({ text: e.text }) as never)
   on('ui.invalidate', async () => ({ value: undefined }) as never)
@@ -174,5 +174,6 @@ test('the message a finished turn answered with is drawn under a Conclusion head
   expect(await draw(final)).toContain('Conclusion')
   const earlier = await draw('Checking how the card draws its frame first.')
   expect(earlier).not.toContain('Conclusion')
-  expect(earlier.some(t => /^─+$/.test(t))).toBe(true)
+  // arcade's border is bold: the top edge of the reply box
+  expect(earlier.some(t => /^━+$/.test(t))).toBe(true)
 })

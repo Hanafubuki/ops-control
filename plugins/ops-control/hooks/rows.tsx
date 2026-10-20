@@ -3,15 +3,26 @@ import { gradient, mix } from './color.ts'
 import { describeTool } from './events.ts'
 import { toolGlyph } from './restyle.ts'
 import { MARKS, retroTag, slabTag } from './rows-text.ts'
+import type { FramePlace } from './frames.ts'
 
-export type RowInput =
-  | { site: 'ToolUse'; tool: string; input: unknown; isRunning: boolean; isErrored: boolean; isInterrupted: boolean; seq?: number }
-  | { site: 'ToolResult' }
+// frame: the row's place in the box around its reply (frames.ts), drawn in every row style; a row without one keeps
+// the per-row cards and the grey rule between replies.
+// changes: a file-changing tool's toggle for its diff; hidden: the diff is folded away until it is pressed.
+export type RowInput = (
+  | { site: 'ToolUse'; tool: string; input: unknown; isRunning: boolean; isErrored: boolean; isInterrupted: boolean; seq?: number; changes?: ChangesToggle }
+  | { site: 'ToolResult'; hidden?: boolean }
   | { site: 'UserMessage'; text: string; isExpanded: boolean; own: boolean; turn?: number }
   // conclusion: the block is a finished turn's final answer
   | { site: 'AssistantMessage'; isFirstOfReply: boolean; xp?: number; conclusion?: boolean }
+  | { site: 'ToolGroup' }
+  | { site: 'TurnDuration' }
+  // a row only framed, never restyled: a hook's notice, a running tool's progress line
+  | { site: 'Notice' }
+) & { frame?: FramePlace }
 
-type Els = { Box: any; Text: any }
+export type ChangesToggle = { shown: boolean; onToggle: () => void }
+
+type Els = { Box: any; Text: any; Button?: any }
 
 function mark(look: Look, row: Extract<RowInput, { site: 'ToolUse' }>, set: typeof MARKS.cards) {
   const c = look.theme.colors
@@ -107,18 +118,104 @@ function opener({ Box, Text }: Els, look: Look, row: RowInput): unknown {
   return <Box key="opener" flexDirection="column" marginTop={1}><Text color={DIVIDER_GREY} wrap="truncate">{RULE}</Text></Box>
 }
 
-export function styleRow(els: Els, look: Look, row: RowInput, engine: unknown, opts: { prefixCards?: boolean } = {}): unknown {
-  const out = draw(els, look, row, engine, opts)
-  if (look.rows === 'classic') return out
+// The edges of the reply box, by the pack's border style.
+const FRAME_GLYPHS: Record<string, { h: string; v: string; tl: string; tr: string; bl: string; br: string }> = {
+  round: { h: '─', v: '│', tl: '╭', tr: '╮', bl: '╰', br: '╯' },
+  single: { h: '─', v: '│', tl: '┌', tr: '┐', bl: '└', br: '┘' },
+  bold: { h: '━', v: '┃', tl: '┏', tr: '┓', bl: '┗', br: '┛' },
+  double: { h: '═', v: '║', tl: '╔', tr: '╗', bl: '╚', br: '╝' },
+  classic: { h: '-', v: '|', tl: '+', tr: '+', bl: '+', br: '+' },
+}
+const frameGlyphs = (look: Look) => FRAME_GLYPHS[look.border] ?? FRAME_GLYPHS.round
+const FILL = 400
+
+// One row's slice of the reply box: both sides, absolute overlays drawn before the row as in card(), so nothing
+// positioned sits above the engine node. The top edge is a line of its own (frameEdge): a message row does not always
+// open with the blank margin line an overlay could lie on.
+function framed({ Box, Text }: Els, look: Look, kids: unknown) {
+  const glyphs = frameGlyphs(look), color = look.theme.colors.faint
+  const side = (edge: { left: 0 } | { right: 0 }) => (
+    <Box position="absolute" top={0} bottom={0} {...edge} width={1} overflow="hidden">
+      <Text color={color}>{(glyphs.v + '\n').repeat(FILL)}</Text>
+    </Box>
+  )
+  return (
+    <Box flexDirection="column" paddingX={2}>
+      {side({ left: 0 })}
+      {side({ right: 0 })}
+      {kids}
+    </Box>
+  )
+}
+
+// The top or bottom edge of a box, on a line of its own: the bottom of the box before a row, the top of the one a
+// prompt opens under itself.
+export function frameEdge({ Box, Text }: Els, look: Look, which: 'top' | 'bottom') {
+  const glyphs = frameGlyphs(look), color = look.theme.colors.faint
+  return (
+    <Box key={`frame-${which}`} flexDirection="row">
+      <Text color={color}>{which === 'top' ? glyphs.tl : glyphs.bl}</Text>
+      <Box flexGrow={1} flexShrink={1} height={1} overflow="hidden"><Text color={color}>{glyphs.h.repeat(FILL)}</Text></Box>
+      <Text color={color}>{which === 'top' ? glyphs.tr : glyphs.br}</Text>
+    </Box>
+  )
+}
+
+// A file-changing tool's toggle for its diff, pressed with a click (fullscreen) or from the focus ring.
+function changesButton({ Box, Text, Button }: Els, look: Look, toolUseId: string, changes: ChangesToggle) {
+  if (!Button) return null
+  return (
+    <Box flexShrink={0} marginTop={1}>
+      <Button key={`changes:${toolUseId}`} plain onPress={() => changes.onToggle()}><Text color={look.theme.colors.accent}>{changes.shown ? ' ▾ hide changes' : ' ▸ changes'}</Text></Button>
+    </Box>
+  )
+}
+
+const isFramed = (row: RowInput): row is RowInput & { frame: FramePlace } =>
+  !!row.frame && (row.frame.inside || row.frame.closes || row.frame.opensAfter)
+
+// A row with a part in a reply box, in any row style: its own drawing, the box's sides around it, and the edges it
+// draws before or after itself. The cards style drops its per-row frames inside the box (drawFramed).
+function styleFramed(els: Els, look: Look, row: RowInput & { frame: FramePlace }, engine: unknown, opts: { prefixCards?: boolean; toolUseId?: string }): unknown {
   const { Box } = els
+  const { frame } = row
+  const out = frame.inside && look.rows === 'cards' ? drawFramed(els, look, row, engine, opts.toolUseId) : withToggle(els, look, row, draw(els, look, row, engine, opts), opts)
+  // the final answer is in no box (frames.ts): it keeps the double rule and the Conclusion title
+  const conclusion = row.site === 'AssistantMessage' && row.conclusion
+  const body = frame.inside ? framed(els, look, out) : out
+  return (
+    <Box flexDirection="column" marginLeft={1}>
+      {frame.closes ? frameEdge(els, look, 'bottom') : null}
+      {conclusion ? opener(els, look, row) : null}
+      {frame.opens ? frameEdge(els, look, 'top') : null}
+      {body}
+      {frame.opensAfter ? frameEdge(els, look, 'top') : null}
+    </Box>
+  )
+}
+
+// A file change's toggle beside the row each style drew; the cards style puts it in its own row (drawFramed, the card).
+function withToggle(els: Els, look: Look, row: RowInput, out: unknown, opts: { toolUseId?: string }): unknown {
+  if (look.rows === 'cards' || row.site !== 'ToolUse' || !row.changes || !opts.toolUseId) return out
+  return <els.Box flexDirection="row">{shrinker(els.Box, out)}{changesButton(els, look, opts.toolUseId, row.changes)}</els.Box>
+}
+
+export function styleRow(els: Els, look: Look, row: RowInput, engine: unknown, opts: { prefixCards?: boolean; toolUseId?: string } = {}): unknown {
+  if (isFramed(row)) return styleFramed(els, look, row, engine, opts)
+  const out = withToggle(els, look, row, draw(els, look, row, engine, opts), opts)
+  const { Box } = els
+  // classic keeps Claude Code's own rows, all but the final answer's Conclusion header, as every style has it
+  if (look.rows === 'classic') return row.site === 'AssistantMessage' && row.conclusion ? <Box flexDirection="column">{opener(els, look, row)}{out}</Box> : out
   // Column, not Ink's default row: a row wrapper shrinks bordered cards to content width.
   return <Box flexDirection="column" marginLeft={1}>{opener(els, look, row)}{out}</Box>
 }
 
-function draw(els: Els, look: Look, row: RowInput, engine: unknown, opts: { prefixCards?: boolean }): unknown {
+function draw(els: Els, look: Look, row: RowInput, engine: unknown, opts: { prefixCards?: boolean; toolUseId?: string }): unknown {
   try {
     const { Box, Text } = els
     if (row.site === 'UserMessage' && (!row.own || row.isExpanded)) return engine
+    // a file change's folded diff, until its toggle is pressed
+    if (row.site === 'ToolResult' && row.hidden) return null
     const input = row.site === 'ToolUse' && row.input !== null && typeof row.input === 'object' && !Array.isArray(row.input) ? row.input as Record<string, unknown> : {}
     const c = look.theme.colors
 
@@ -131,10 +228,12 @@ function draw(els: Els, look: Look, row: RowInput, engine: unknown, opts: { pref
       }
 
       case 'cards': {
+        if (row.site === 'ToolGroup' || row.site === 'TurnDuration' || row.site === 'Notice') return engine
         if (row.site === 'ToolResult') return <Box paddingLeft={2}>{engine}</Box>
         if (row.site === 'ToolUse') {
           const m = mark(look, row, MARKS.cards)
-          return card(els, look, 'row', [shrinker(Box, engine), fixed(els, m.color, ' ' + m.mark)], c.faint, opts.prefixCards)
+          const toggle = row.changes && opts.toolUseId ? changesButton(els, look, opts.toolUseId, row.changes) : null
+          return card(els, look, 'row', [shrinker(Box, engine), fixed(els, m.color, ' ' + m.mark), toggle], c.faint, opts.prefixCards)
         }
         const { labels, markers, xp } = look.rowFlags
         if (row.site === 'UserMessage') {
@@ -161,6 +260,7 @@ function draw(els: Els, look: Look, row: RowInput, engine: unknown, opts: { pref
           const body = <Box paddingLeft={3}>{engine}</Box>
           return row.isFirstOfReply && look.rowFlags.labels ?<Box flexDirection="column">{label(els, '[CLAUDE]', look, c.accent, true)}{body}</Box> : body
         }
+        if (row.site !== 'ToolUse') return engine
         const m = mark(look, row, MARKS.retro)
         return <Box flexDirection="row"><Box flexShrink={0} marginTop={1}>{label(els, retroTag(row.tool), look, c.accent)}</Box>{shrinker(Box, engine)}{fixed(els, m.color, ' ' + m.mark)}</Box>
       }
@@ -186,6 +286,7 @@ function draw(els: Els, look: Look, row: RowInput, engine: unknown, opts: { pref
             </Box>
           )
         }
+        if (row.site !== 'ToolUse') return engine
         const m = mark(look, row, MARKS.slab)
         const n = row.seq ? String(row.seq).padStart(2, '0') + '  ' : ''
         return (
@@ -200,5 +301,29 @@ function draw(els: Els, look: Look, row: RowInput, engine: unknown, opts: { pref
     return engine
   } catch {
     return engine
+  }
+}
+
+// Inside a reply box the box is the only frame: tool rows are plain with their mark, messages keep their marker and
+// lose the side bar, and a folded diff draws nothing.
+function drawFramed(els: Els, look: Look, row: RowInput, engine: unknown, toolUseId: string | undefined): unknown {
+  const { Box } = els
+  const c = look.theme.colors
+  switch (row.site) {
+    case 'ToolUse': {
+      const m = mark(look, row, MARKS.cards)
+      const toggle = row.changes && toolUseId ? changesButton(els, look, toolUseId, row.changes) : null
+      return <Box flexDirection="row">{shrinker(Box, engine)}{fixed(els, m.color, ' ' + m.mark)}{toggle}</Box>
+    }
+    case 'ToolResult':
+      return row.hidden ? null : <Box paddingLeft={2}>{engine}</Box>
+    case 'AssistantMessage': {
+      const { labels, markers, xp } = look.rowFlags
+      const kids = row.isFirstOfReply && labels ? [label(els, 'claude', look, c.accent), engine] : [engine]
+      const body = markers ? marked(els, row.isFirstOfReply ? '◆ ' : '  ', c.read, kids) : <Box flexDirection="column">{kids}</Box>
+      return xp && row.isFirstOfReply && row.xp ? <Box flexDirection="column">{xpTag(els, row.xp, c.edit)}{body}</Box> : body
+    }
+    default:
+      return engine
   }
 }

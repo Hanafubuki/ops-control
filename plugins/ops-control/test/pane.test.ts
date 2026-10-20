@@ -224,7 +224,7 @@ test('empty states', async () => {
 test('status rows say the action and context in words', async () => {
   const rows = text(statusRows(M, T, 54, 0))
   expect(rows[0]).toBe('✎ Editing src/auth.ts')
-  expect(rows[1]).toBe('♥♥♡♡♡  context 36% left')
+  expect(rows[1]).toMatch(/^HP █+░+  36% context left$/)
   expect(rows[2]).toBe('◆ scout 2 working')
 })
 
@@ -238,8 +238,8 @@ test('the first status row carries Lv N and a ten-cell bar when it fits, and dro
 test('the life row shows the tighter usage window, then spend, then context', async () => {
   const life = (m: Partial<Model>, now = 0) => text(statusRows({ ...M, ...m }, T, 54, now))[1]
   const limits = [{ kind: 'five_hour', percentUsed: 30, resetsAt: '1970-01-01T05:00:00Z' }, { kind: 'seven_day', percentUsed: 62.4 }]
-  expect(life({ limits, costUsd: 4.2 })).toBe('♥♥♡♡♡  weekly limit 38% left')
-  expect(life({ limits: [{ ...limits[0]!, percentUsed: 90 }, limits[1]!] })).toBe('♥♡♡♡♡  5h limit 10% left')
+  expect(life({ limits, costUsd: 4.2 })).toMatch(/^HP █+░+  38% weekly limit left$/)
+  expect(life({ limits: [{ ...limits[0]!, percentUsed: 90 }, limits[1]!] })).toMatch(/^HP █+░+  10% 5h limit left$/)
   // a window past its reset no longer counts; with neither left, an API-key session shows spend
   expect(life({ limits: [limits[0]!], costUsd: 4.2 }, Date.parse('1970-01-01T06:00:00Z'))).toBe('$4.20 spent this session')
   expect(life({ costUsd: 0.5 })).toBe('$0.50 spent this session')

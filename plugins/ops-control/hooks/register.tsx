@@ -1,4 +1,4 @@
-import type { EngineInterface, PaneOpenArgs, PromptSubmitInput, PromptSubmitResult, Register, RenderElement, RenderSurface, Timer } from 'claude-code'
+import type { EngineInterface, PaneOpenArgs, PromptSubmitInput, PromptSubmitResult, Register, RenderElement, RenderInput, RenderSurface, Timer } from 'claude-code'
 import type { Host } from './host.ts'
 import { initialModel, normalizeModel, applyEvent, mergeCounts, isBusy, agentsRunning, type Model, type Ev } from './model.ts'
 import { approvalLabel, dialogCall, modeAsksPerson } from './events.ts'
@@ -26,6 +26,7 @@ import { dropdownKey, optionKey, renderSettings, withinDropdown, type Dropdown }
 import { focusablesOf, steer, stepOf, tabStep } from './panekeys.ts'
 import { openBoard } from './sqboard.ts'
 import { boardPet, writeBoardPet } from './boardpet.ts'
+import { makeFrames } from './frames.ts'
 import { ARCADE } from './sqthemes.ts'
 import { startOpstask, wireOpstask } from './opstask.ts'
 import { startSysSampler } from './sysload.ts'
@@ -37,7 +38,7 @@ import { agentWork, workIssues, workOf } from './workbar.ts'
 import { NO_SWITCHES, isSource, offNote, readGuardrails, readSwitches, toggle, verdictFor, type GuardSwitches } from './guardrails.ts'
 import { renderPane, bubbleBox, petStripCols, visibleTabs, COVER_COLS, type PaneExtra, type PaneView, type TabId } from './pane.tsx'
 import { spinnerWord, newTurnWord } from './restyle.ts'
-import { styleRow } from './rows.tsx'
+import { frameEdge, styleRow } from './rows.tsx'
 import { makeTurns } from './turns.ts'
 import { orbStateOf, usesOwnSpinner, checkedSpinnerProps } from './spinner.ts'
 import type { PetClientProps } from './client/pet.tsx'
@@ -75,6 +76,7 @@ import { deviceRows, expire, initialLists, listError, loadingFrom, needsLoad, pl
 import { detached, ensureBinary, moveFile, pickTerminal, platformOf, releaseTarget, removeTree, shellLine, type TermEnv } from './launch.ts'
 
 type Engine = EngineInterface
+type SpinnerRender = RenderInput<'Spinner'>
 type SpinKey = { turnAt: number; detail: string; state: OrbState }
 
 const BAND = { plugin: 'ops-control', key: 'band' } as const
@@ -427,6 +429,10 @@ function ask<T>($: Engine, slot: Asked<T>, key: string, call: () => Promise<T | 
   })
 }
 const turns = makeTurns()
+// The box around each reply (frames.ts), and the file-changing calls whose folded diff the person opened.
+const frames = makeFrames(text => isFinalAnswer(text))
+const shownChanges = new Set<string>()
+const CHANGE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 const dividerByMessage = new Map<string, { key: string; value: Divider | null }>()
 const palette = () => ({ ...theme.colors })
 // What a held answer was asked under: both layers' packs and the effects the look picked,
@@ -1759,7 +1765,8 @@ function settingsActions($: Engine) {
       settingsUi = { ...settingsUi, open: which }
       relook($)
       const key = which ? optionKey(which, which === 'theme' ? shownTheme() : namePackId) : was ? dropdownKey(was) : undefined
-      if (key) void $.ui.focus({ requestId: 'ops-control', key }).catch(() => {})
+      // a long list can reach below the body, so the option the ring lands on is scrolled into view
+      if (key) void $.ui.focus({ requestId: 'ops-control', key }).then(() => $.ui.scroll({ to: { key }, in: 'ops-control' })).catch(() => {})
     },
     onCreate: (description: string) => {
       const text = description.trim()
@@ -1861,6 +1868,24 @@ async function recheckGuard($: Engine, id: string): Promise<boolean> {
 // The loader reads `on("<event>", hook)` literally, so no wrapper can gate the hooks:
 // each one opens with `if (off) return next(e)`. session.start and session.end run
 // the guard and its cleanup themselves.
+// The spinner itself: the pack's own Client, or the engine's line with the theme's word.
+async function spinnerRow($: Engine, e: SpinnerRender, next: (e: SpinnerRender) => Promise<RenderElement>): Promise<RenderElement> {
+  const word = spinnerWord(theme, e.props.word, reducedMotion)
+  if (!usesOwnSpinner(look, reducedMotion, e.props.message) || (e.surface !== 'terminal' && e.surface !== 'desktop')) {
+    return next({ ...e, props: { ...e.props, word } })
+  }
+  try {
+    const live = (await $.state.get(SPIN)).value
+    const input = { word, turnAt: live?.turnAt || Date.now(), detail: live?.detail ?? model.act.label, state: (live?.state ?? orbStateOf(model)) as OrbState }
+    const props = checkedSpinnerProps(look, input, reducedMotion, Date.now())
+    if (!props) return next(e)
+    const { Client } = $.ui.resolve(e)
+    return <Client key="ops-control-spinner" module="./client/spinner.tsx" props={props} />
+  } catch {
+    return next(e)
+  }
+}
+
 export const register: Register = (on, options) => {
   wireOpspin(on, () => off)
   wireOpstask(on, () => off)
@@ -2018,6 +2043,8 @@ export const register: Register = (on, options) => {
     if (!e.tool_use_id) return next(e)
     const input = e as unknown as Record<string, unknown>
     const toolUseId = e.tool_use_id
+    // the reply box its rows belong in, wherever they first draw (frames.ts)
+    if (!e.agentId) frames.noteCall(toolUseId)
     if (!e.agentId && e.tool === 'Bash' && typeof input.command === 'string' && fridayDeploy(input.command, localTime(await $.clock.now(), tzOffset))) friday = true
     feed($, { type: 'tool-start', at: Date.now(), tool: e.tool, toolUseId, agentId: e.agentId, input })
     // before next(): the subagent's calls arrive while the Agent call runs
@@ -2344,6 +2371,22 @@ export const register: Register = (on, options) => {
       }
       return {}
     }
+    // an open Settings dropdown can draw the tab taller than the body, and then ↑/↓ arrive here as one-row scrolls
+    // instead of ring moves: walk its options as ui.focus would, and bring the one landed on into view
+    const open = view.tab === 'settings' ? settingsUi.open : undefined
+    if (open && e.origin.kind === 'person' && !e.pointer && paneFocus) {
+      const go = steer(paneRing, paneFocus, e.by > 0 ? 1 : -1, view.tab, k => withinDropdown(open, k))
+      if (go.focus) {
+        const key = go.focus
+        void $.ui.focus({ requestId: 'ops-control', key })
+          .then(() => $.ui.scroll({ to: { key }, in: 'ops-control' }))
+          .catch(() => {})
+      }
+      return {}
+    }
+    // the Settings tab has no window of its own: a plugin's scroll (the one above, bringing an option into view)
+    // moves the engine's body
+    if (view.tab === 'settings' && e.origin.kind === 'plugin') return next(e)
     const by = e.by
     const offset = Math.max(0, Math.min(Math.min(view.offset ?? 0, scroll.last) + by, scroll.last))
     if (offset !== view.offset) { view = { ...view, offset }; publish($) }
@@ -2452,22 +2495,13 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  // While a turn runs, the spinner under the transcript draws the bottom edge of the reply box still open.
   on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
     if (off) return next(e)
-    const word = spinnerWord(theme, e.props.word, reducedMotion)
-    if (!usesOwnSpinner(look, reducedMotion, e.props.message) || (e.surface !== 'terminal' && e.surface !== 'desktop')) {
-      return next({ ...e, props: { ...e.props, word } })
-    }
-    try {
-      const live = (await $.state.get(SPIN)).value
-      const input = { word, turnAt: live?.turnAt || Date.now(), detail: live?.detail ?? model.act.label, state: (live?.state ?? orbStateOf(model)) as OrbState }
-      const props = checkedSpinnerProps(look, input, reducedMotion, Date.now())
-      if (!props) return next(e)
-      const { Client } = $.ui.resolve(e)
-      return <Client key="ops-control-spinner" module="./client/spinner.tsx" props={props} />
-    } catch {
-      return next(e)
-    }
+    const spinner = await spinnerRow($, e, next)
+    if (e.surface !== 'terminal' || !frames.isOpen()) return spinner
+    const els = $.ui.resolve(e)
+    return <els.Box flexDirection="column"><els.Box marginLeft={1}>{frameEdge(els, look, 'bottom')}</els.Box>{spinner}</els.Box>
   })
 
   on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
@@ -2477,7 +2511,9 @@ export const register: Register = (on, options) => {
     const p = e.props
     const own = p.origin.kind === 'composer' && !p.from && !p.task
     const els = $.ui.resolve(e)
-    const styled = styleRow(els, look, { site: 'UserMessage', text: p.text, isExpanded: p.isExpanded, own, turn: own && !p.isExpanded ? turns.turnFor(e.requestId) : undefined }, row) as RenderElement
+    // a slash command's echo closes the box but opens none: its output is no reply
+    const frame = frames.prompt(`UserMessage:${e.requestId}`, { opensNext: !/^\s*\//.test(p.text), peek: e.requestId === 'placeholder' })
+    const styled = styleRow(els, look, { site: 'UserMessage', text: p.text, isExpanded: p.isExpanded, own, turn: own && !p.isExpanded ? turns.turnFor(e.requestId) : undefined, frame }, row) as RenderElement
     if (!own || p.isExpanded) return styled
     const rule = await dividerFor($, e.requestId)
     if (!rule) return styled
@@ -2489,7 +2525,7 @@ export const register: Register = (on, options) => {
     return (
       <Box flexDirection="column">
         {styled}
-        <Box position="absolute" top={0} left={0} right={0} height={1} flexDirection="row">
+        <Box position="absolute" top={frame.closes ? 1 : 0} left={0} right={0} height={1} flexDirection="row">
           {side(rule.left, 'l')}
           <Box flexGrow={1} flexShrink={1} height={1} overflow="hidden"><Text color={rule.fill.color}>{rule.fill.text.repeat(400)}</Text></Box>
           {side(rule.right, 'r')}
@@ -2502,20 +2538,51 @@ export const register: Register = (on, options) => {
     const row = await next(e)
     if (e.surface !== 'terminal') return row
     const conclusion = e.props.isFirstOfReply && isFinalAnswer(e.props.text)
-    return styleRow($.ui.resolve(e), look, { site: 'AssistantMessage', isFirstOfReply: e.props.isFirstOfReply, xp: xpFor(e.requestId, e.props.isFirstOfReply), ...(conclusion && { conclusion }) }, row) as RenderElement
+    const rowKey = `AssistantMessage:${e.requestId}`
+    const frame = e.props.isFirstOfReply ? frames.opener(rowKey, e.props.text) : frames.member(rowKey)
+    return styleRow($.ui.resolve(e), look, { site: 'AssistantMessage', isFirstOfReply: e.props.isFirstOfReply, xp: xpFor(e.requestId, e.props.isFirstOfReply), ...(conclusion && { conclusion }), frame }, row) as RenderElement
   })
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
     if (off) return next(e)
     const row = await next(e)
     if (e.surface !== 'terminal') return row
     const p = e.props
-    return styleRow($.ui.resolve(e), look, { site: 'ToolUse', tool: p.tool, input: p.input, isRunning: p.isRunning, isErrored: p.isErrored, isInterrupted: p.isInterrupted, seq: turns.toolSeq(e.requestId) }, row) as RenderElement
+    const frame = frames.member(`ToolUse:${e.requestId}`, [e.requestId])
+    // a finished file change folds its diff away (ToolResult below) behind this toggle; ctrl+o shows it anyway
+    const changes = CHANGE_TOOLS.has(p.tool) && !p.isRunning && !p.isErrored && !p.isInterrupted && !p.isExpanded
+      ? { shown: shownChanges.has(e.requestId), onToggle: () => { if (!shownChanges.delete(e.requestId)) shownChanges.add(e.requestId); $.ui.invalidate('ui.render') } }
+      : undefined
+    return styleRow($.ui.resolve(e), look, { site: 'ToolUse', tool: p.tool, input: p.input, isRunning: p.isRunning, isErrored: p.isErrored, isInterrupted: p.isInterrupted, seq: turns.toolSeq(e.requestId), frame, ...(changes && { changes }) }, row, { toolUseId: e.requestId }) as RenderElement
   })
   on('ui.render', { component: 'ToolResult' }, async ($, e, next) => {
     if (off) return next(e)
     const row = await next(e)
     if (e.surface !== 'terminal') return row
-    return styleRow($.ui.resolve(e), look, { site: 'ToolResult' }, row) as RenderElement
+    const p = e.props
+    const frame = frames.member(`ToolResult:${e.requestId}`, [e.requestId])
+    const hidden = CHANGE_TOOLS.has(p.tool) && !p.isErrored && !p.isExpanded && !shownChanges.has(e.requestId)
+    return styleRow($.ui.resolve(e), look, { site: 'ToolResult', frame, ...(hidden && { hidden }) }, row) as RenderElement
+  })
+  // Folded runs of reads and searches, hook notices and a running tool's progress line sit inside the reply box,
+  // drawn by the engine; the turn's duration line closes the box.
+  for (const component of ['ToolGroup', 'InfoNotice', 'ToolProgress'] as const) {
+    on('ui.render', { component }, async ($, e, next) => {
+      if (off) return next(e)
+      const row = await next(e)
+      if (e.surface !== 'terminal' || (e.props as { isExpanded?: boolean }).isExpanded) return row
+      const calls = e.component === 'ToolGroup' ? e.props.calls.flatMap(call => (call.tool_use_id ? [call.tool_use_id] : [])) : []
+      const frame = frames.member(`${component}:${e.requestId}`, calls)
+      if (!frame.inside) return row
+      return styleRow($.ui.resolve(e), look, { site: component === 'ToolGroup' ? 'ToolGroup' : 'Notice', frame }, row) as RenderElement
+    })
+  }
+  on('ui.render', { component: 'TurnDuration' }, async ($, e, next) => {
+    if (off) return next(e)
+    const row = await next(e)
+    if (e.surface !== 'terminal') return row
+    const frame = frames.closer(`TurnDuration:${e.requestId}`)
+    if (!frame.closes) return row
+    return styleRow($.ui.resolve(e), look, { site: 'TurnDuration', frame }, row) as RenderElement
   })
 
   on('ui.render', { component: 'CommandOutput' }, async ($, e, next) => {

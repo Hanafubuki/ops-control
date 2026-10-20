@@ -1,6 +1,7 @@
 import { test, expect } from 'claude-code/testing'
 import { DIVIDER_GREY, styleRow, type RowInput } from '../hooks/rows.tsx'
 import { resolveLook, type Look } from '../hooks/packs.ts'
+import { engineViolations } from './engine-tree.ts'
 
 const els = { Box: 'Box', Text: 'Text' }
 const ENGINE = { type: 'engine', ref: 7 }
@@ -358,4 +359,103 @@ test('a grey rule opens each reply message; a turn\'s final answer gets a double
   expect(hasEngine(fin)).toBe(true)
   // classic keeps Claude Code's own look
   expect(texts(styleRow(els, look('classic'), { site: 'AssistantMessage', isFirstOfReply: true }, ENGINE))).toEqual([])
+})
+
+// The reply box (frames.ts): each row draws its slice of it, in every row style.
+const at = (fields: object) => ({ closes: false, opens: false, opensAfter: false, inside: false, ...fields })
+const opening = at({ opens: true, inside: true })
+const middle = at({ inside: true })
+const sides = (n: any) => walk(n).filter(x => x.type === 'Text' && /^[┃│║|]\n/.test(String(x.children?.[0])))
+const edge = (n: any, glyph: string) => walk(n).some(x => x.type === 'Text' && String(x.children?.[0]).startsWith(glyph.repeat(20)))
+const ROW_STYLES = ['classic', 'crt', 'cozy', 'arcade', 'minimal', 'retro', 'slab'] as const
+
+test('reply box: the row that opens it draws the top edge and both sides in faint, the pack border style', async () => {
+  const l = look('arcade')
+  const row = styleRow(els, l, { site: 'AssistantMessage', isFirstOfReply: true, frame: opening }, ENGINE) as any
+  // the top edge is a line of its own above the row, then the sides run beside it
+  expect([texts(row.children.filter(Boolean)[0])[0], texts(row.children.filter(Boolean)[0]).at(-1)]).toEqual(['┏', '┓'])
+  expect(sides(row).map(x => String(x.children[0])[0])).toEqual(['┃', '┃'])
+  expect(sides(row).every(x => x.props.color === l.theme.colors.faint)).toBe(true)
+  expect(edge(row, '━')).toBe(true)
+  // the box replaces the grey rule and the side bar
+  expect(texts(row).some(t => /^─{20,}$/.test(t))).toBe(false)
+  expect(bar(row)).toBeUndefined()
+  expect(hasEngine(row)).toBe(true)
+  expect(engineViolations(row)).toEqual([])
+})
+
+test('reply box: a row inside it draws only the sides; the next reply first closes it', async () => {
+  const l = look('arcade')
+  const inside = styleRow(els, l, tool({ frame: middle }), ENGINE)
+  expect(sides(inside).map(x => String(x.children[0])[0])).toEqual(['┃', '┃'])
+  expect(edge(inside, '━')).toBe(false)
+  const next = styleRow(els, l, { site: 'AssistantMessage', isFirstOfReply: true, frame: at({ closes: true, opens: true, inside: true }) }, ENGINE) as any
+  const lines = next.children.filter(Boolean)
+  expect([texts(lines[0])[0], texts(lines[0]).at(-1)]).toEqual(['┗', '┛'])
+  expect([texts(lines[1])[0], texts(lines[1]).at(-1)]).toEqual(['┏', '┓'])
+})
+
+test('reply box: a prompt closes the box above it and opens the next one under itself', async () => {
+  const l = look('arcade')
+  const prompt = styleRow(els, l, user({ frame: at({ closes: true, opensAfter: true }) }), ENGINE) as any
+  const lines = prompt.children.filter(Boolean)
+  expect(texts(lines[0])[0]).toBe('┗')
+  expect(texts(lines.at(-1))[0]).toBe('┏')
+  expect(texts(lines.at(-1)).at(-1)).toBe('┓')
+  expect(sides(prompt)).toEqual([])
+  expect(walk(prompt).some(x => x.type === 'Text' && text(x) === '▶ ')).toBe(true)
+  expect(engineViolations(prompt)).toEqual([])
+})
+
+test('reply box: every row style draws it, in its theme\'s faint and its pack\'s border', async () => {
+  for (const name of ROW_STYLES) {
+    const l = look(name)
+    const row = styleRow(els, l, tool({ frame: middle }), ENGINE)
+    expect(sides(row).length).toBe(2)
+    expect(sides(row).every(x => x.props.color === l.theme.colors.faint)).toBe(true)
+    expect(hasEngine(row)).toBe(true)
+    expect(engineViolations(row)).toEqual([])
+    const prompt = styleRow(els, l, user({ frame: at({ opensAfter: true }) }), ENGINE)
+    expect(walk(prompt).some(x => x.type === 'Text' && x.props?.color === l.theme.colors.faint)).toBe(true)
+  }
+})
+
+test('reply box: tool rows inside it have no card of their own, only their mark', async () => {
+  const l = look('arcade')
+  const row = styleRow(els, l, tool({ frame: middle }), ENGINE)
+  expect(bordered(row)).toBe(false)
+  expect(text(row)).toContain('✓')
+})
+
+test('reply box: the final answer is in no box: it closes the one before it and keeps the double rule and Conclusion title', async () => {
+  const l = look('arcade')
+  const row = styleRow(els, l, { site: 'AssistantMessage', isFirstOfReply: true, conclusion: true, frame: at({ closes: true }) }, ENGINE) as any
+  expect(texts(row.children[0])[0]).toBe('┗')
+  expect(sides(row)).toEqual([])
+  expect(texts(row).filter(t => /^═+$|^Conclusion$/.test(t)).map(t => t[0])).toEqual(['═', '═', 'C'])
+  expect(hasEngine(row)).toBe(true)
+  // with no box before it, it is the row it always was
+  expect(styleRow(els, l, { site: 'AssistantMessage', isFirstOfReply: true, conclusion: true, frame: at({}) }, ENGINE))
+    .toEqual(styleRow(els, l, { site: 'AssistantMessage', isFirstOfReply: true, conclusion: true }, ENGINE))
+})
+
+test('reply box: a folded diff draws nothing; a file change carries the toggle that opens it, in every row style', async () => {
+  const withButton = { ...els, Button: 'Button' }
+  for (const name of ROW_STYLES) {
+    const l = look(name)
+    expect(hasEngine(styleRow(withButton, l, { site: 'ToolResult', hidden: true, frame: middle }, ENGINE))).toBe(false)
+    expect(hasEngine(styleRow(withButton, l, { site: 'ToolResult', frame: middle }, ENGINE))).toBe(true)
+    // pressing it is in render.test.ts
+    const edit = (shown: boolean) => styleRow(withButton, l, tool({ tool: 'Edit', frame: middle, changes: { shown, onToggle: () => {} } }), ENGINE, { toolUseId: 'u1' })
+    const button = walk(edit(false)).find(x => x.type === 'Button')
+    expect(button.props.key).toBe('changes:u1')
+    expect(text(button)).toContain('▸ changes')
+    expect(text(walk(edit(true)).find(x => x.type === 'Button'))).toContain('▾ hide changes')
+    expect(engineViolations(edit(false))).toEqual([])
+  }
+})
+
+test('reply box: a row with no part in a box keeps its own look', async () => {
+  const l = look('arcade')
+  expect(styleRow(els, l, tool({ frame: at({}) }), ENGINE)).toEqual(styleRow(els, l, tool(), ENGINE))
 })
