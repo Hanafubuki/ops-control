@@ -25,6 +25,7 @@ import { createPack, loadPackFiles } from './packmaker.ts'
 import { dropdownKey, optionKey, renderSettings, withinDropdown, type Dropdown } from './settingstab.tsx'
 import { focusablesOf, steer, stepOf, tabStep } from './panekeys.ts'
 import { openBoard } from './sqboard.ts'
+import { boardPet, writeBoardPet } from './boardpet.ts'
 import { ARCADE } from './sqthemes.ts'
 import { startOpstask, wireOpstask } from './opstask.ts'
 import { startSysSampler } from './sysload.ts'
@@ -114,6 +115,10 @@ const currentPack = (): NamePack => allPacks().find(p => p.id === namePackId) ??
 // The pet drawn: off while hidden, else the pack's character when it has one, else the person's own.
 const shownPet = (): PetSetting => (!petShown ? 'off' : packPet ?? pet)
 const shownSheet = (): PetSheet | undefined => (packPet ? packPetSheet : petSheet)
+// The Sidequest board's character (boardpet.ts): the one the pane would draw, even while the pet is hidden.
+// boardPetText is what was last written; boardPetWrite chains the writes so they land in order.
+let boardPetText = ''
+let boardPetWrite: Promise<void> = Promise.resolve()
 // The stored /ops outfit choice: a name or 'off'. What is worn also depends on the pet and the level.
 let outfitChoice: string | undefined
 let bubbles: BubbleSetting = 'on'
@@ -1217,6 +1222,14 @@ function redraw($: Engine) {
 function relook($: Engine) {
   $.ui.invalidate('ui.render')
   publish($)
+  publishBoardPet($)
+}
+function publishBoardPet($: Engine) {
+  if (!configDir) return
+  const id = packPet ?? (pet === 'off' ? 'clawd' : pet)
+  const sheet = (packPet ? packPetSheet : pet === 'off' ? undefined : petSheet) ?? (Object.hasOwn(BUILTIN_SHEETS, id) ? BUILTIN_SHEETS[id] : undefined) ?? CLAWD_SHEET
+  const host = hostOf($)
+  boardPetWrite = boardPetWrite.then(async () => { boardPetText = await writeBoardPet(host, boardPet(id, sheet, look.pet), boardPetText) })
 }
 // Resolves the mix against the packs and themes on disk. Returns the errors it toasted.
 async function loadLook($: Engine): Promise<string[]> {

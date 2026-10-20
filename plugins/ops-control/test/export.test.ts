@@ -34,7 +34,8 @@ test('export with no or an unknown target lists the targets', async () => {
   expect(Object.keys(files)).toEqual([])
 })
 
-const notGuard = (p: string) => !p.includes('/ops-control/instances/')
+// the session's own files: its instance guard and the Sidequest board's character
+const notGuard = (p: string) => !p.includes('/ops-control/instances/') && !p.includes('/ops-control/board/')
 
 // session.start is where register.tsx reads the env, so the engine boots first
 const engine = async ($: any, on: any, env?: Record<string, string>) => {
