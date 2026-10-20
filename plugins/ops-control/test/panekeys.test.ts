@@ -1,5 +1,6 @@
 import { expect } from 'claude-code/testing'
 import { focusablesOf, steer, stepOf, tabStep } from '../hooks/panekeys.ts'
+import { tabLines } from '../hooks/pane.tsx'
 import { test } from './kit.ts'
 
 const RING = ['tab-plan', 'tab-context', 'tab-settings', 'settings-board', 'settings-theme', 'settings-pack', 'settings-pet']
@@ -53,4 +54,15 @@ test('← and → step through the tabs, wrapping at the ends', () => {
   expect(tabStep(tabs, 'plan', -1)).toBe('settings')
   expect(tabStep(tabs, 'settings', 1)).toBe('plan')
   expect(tabStep(tabs, 'gone', 1)).toBe('plan')
+})
+
+test('the tab strip wraps onto another row when the pane is too narrow, keeping the tabs in order', () => {
+  const tabs = [['plan', 'Plan'], ['context', 'Context'], ['guardrails', 'Guardrails'], ['agents', 'Agents'], ['diff', 'Diff'], ['music', 'Music'], ['settings', 'Settings']] as const
+  // [ Plan ] [ Context ] … [ Settings ] is 78 cells on one row
+  expect(tabLines(tabs, 120)).toEqual([[0, 1, 2, 3, 4, 5, 6]])
+  expect(tabLines(tabs, 78)).toEqual([[0, 1, 2, 3, 4, 5, 6]])
+  expect(tabLines(tabs, 77)).toEqual([[0, 1, 2, 3, 4, 5], [6]])
+  expect(tabLines(tabs, 40)).toEqual([[0, 1, 2], [3, 4, 5], [6]])
+  // a tab wider than the pane still gets a row of its own
+  expect(tabLines(tabs, 8)).toEqual([[0], [1], [2], [3], [4], [5], [6]])
 })

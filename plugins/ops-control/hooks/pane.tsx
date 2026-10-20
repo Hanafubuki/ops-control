@@ -781,15 +781,32 @@ function linkRow(els: { Box: any; Text: any; Button: any }, r: Seg[], l: RowLink
   )
 }
 
+// The tab strip in rows that fit `width`: a tab draws as `[ Label ]`, one space apart, and goes to the next row
+// when it would not fit. Each entry is the tab's index in `tabs`.
+export function tabLines(tabs: readonly (readonly [string, string])[], width: number): number[][] {
+  const lines: number[][] = []
+  let used = 0
+  tabs.forEach(([, label], i) => {
+    const cells = visibleLength([{ text: label, color: '' }]) + 4
+    const line = lines.at(-1)
+    if (line && used + 1 + cells <= width) { line.push(i); used += 1 + cells; return }
+    lines.push([i])
+    used = cells
+  })
+  return lines
+}
+
 export function renderPane(els: { Box: any; Text: any; Button: any }, m: Model, base: Theme, v: PaneView, width: number, compact: boolean, now: number, onTab: (id: TabId) => void, extra?: PaneExtra) {
   const { Box, Text, Button } = els
   const look = extra?.look, t = look?.theme ?? base
   const inner = width - 2
   const shown = visibleTabs(extra?.tabs, v.tab)
   v = { ...v, tab: shown.tab }
+  // a narrow pane wraps the tab strip onto more rows, which the tab's content gives up
+  const strip = tabLines(shown.tabs, width), stripRows = strip.length
   // the drawer shows a tab strip, the tab content and one pet row, all within COMPACT_ROWS
   let rowsLeft = compact && extra?.pet ? COMPACT_ROWS - 2 : COMPACT_ROWS
-  if (compact && extra?.bodyRows) rowsLeft = Math.max(1, Math.min(rowsLeft, extra.bodyRows - 1 - (extra.pet ? 1 : 0)))
+  if (compact && extra?.bodyRows) rowsLeft = Math.max(1, Math.min(rowsLeft, extra.bodyRows - stripRows - (extra.pet ? 1 : 0)))
   let { rows, body, controls, seek, links, nav } = tabParts(m, t, v, inner, compact, now, rowsLeft, look?.border ?? 'round', extra?.requests)
   // links and nav open requests on the Plan tab and agents on the Agents tab; without a handler a row is plain
   // text and a view in full has no way back, so neither is drawn
@@ -799,7 +816,7 @@ export function renderPane(els: { Box: any; Text: any; Button: any }, m: Model, 
   let hint: any = null, open = 0, last = 0, win = 0
   if (!compact && extra?.bodyRows) {
     // tab strip and its margin sit above, the footer below; the tab gets the rest and scrolls on its own
-    const room = Math.max(2, extra.bodyRows - 2 - footerRows(m, t, extra, width, now) - (controls ? 2 : 0) - (nav ? 1 : 0))
+    const room = Math.max(2, extra.bodyRows - stripRows - 1 - footerRows(m, t, extra, width, now) - (controls ? 2 : 0) - (nav ? 1 : 0))
     open = Math.max(0, room - rows.length)
     if (rows.length > room) {
       // box edges and what follows the first box stay put; only that box's body rows scroll
@@ -822,9 +839,11 @@ export function renderPane(els: { Box: any; Text: any; Button: any }, m: Model, 
   return (
     // minHeight, not height: a short tab still pushes the status box to the bottom of the body
     <Box flexDirection="column" width={width} minHeight={compact ? undefined : extra?.minRows}>
-      <Box flexDirection="row" gap={1}>
-        {shown.tabs.map(([id, label], i) => <Button key={'tab-' + id} label={label} hotkey={String(i + 1)} {...(TAB_ACTIONS[i] && { action: TAB_ACTIONS[i] })} variant={v.tab === id ? 'primary' : undefined} dimColor={v.tab !== id} onPress={() => onTab(id)} />)}
-      </Box>
+      {strip.map((line, row) => (
+        <Box key={'tabs-' + row} flexDirection="row" gap={1}>
+          {line.map(i => { const [id, label] = shown.tabs[i]!; return <Button key={'tab-' + id} label={label} hotkey={String(i + 1)} {...(TAB_ACTIONS[i] && { action: TAB_ACTIONS[i] })} variant={v.tab === id ? 'primary' : undefined} dimColor={v.tab !== id} onPress={() => onTab(id)} /> })}
+        </Box>
+      ))}
       <Box flexDirection="column" flexGrow={1} marginTop={compact ? 0 : 1}>
         {nav && (
           <Box key="request-nav" flexDirection="row" gap={2}>
