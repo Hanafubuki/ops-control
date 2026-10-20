@@ -1,4 +1,4 @@
-# ops-control
+# Ops Control
 
 ![Ops Control in Claude Code: the transcript on the left with the work bar over the prompt (6 of 6 milestones done, context 18%, 5-hour limit 35%), and the Ops Control pane on the right on its Plan tab, listing four requests, above the status box with the HP bar, the level and the pet](docs/ops-control.png)
 
