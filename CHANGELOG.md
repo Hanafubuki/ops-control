@@ -2,6 +2,16 @@
 
 Releases of the ops-control marketplace. Version numbers follow [semantic versioning](https://semver.org); each release is a git tag.
 
+## [1.0.1] - 2026-10-20
+
+### Ops Control 1.0.1
+- A grey rule between Claude's messages, and a double accent rule with a "Conclusion" title over the final answer.
+- A tool row that opens without a blank line keeps its title: the card frame is drawn under the row.
+- The selected pack's character is the Sidequest board's logo, tab icon and notification icon (Clawd while none is set).
+
+### Releases
+- Every push to `main` that changes a plugin is now released automatically: the Ops Control version gets a new patch number and a tag, with notes from this file. A version raised by hand (a minor or major release) is tagged as is.
+
 ## [1.0.0] - 2026-10-20
 
 The first release.

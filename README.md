@@ -214,6 +214,8 @@ The easiest way to make one is to ask Claude, for example "make me an Ops Contro
 
 Each release is a git tag (`v1.0.0`, `v1.1.0`, …) with notes on the [Releases page](https://github.com/Hanafubuki/ops-control/releases) and in [CHANGELOG.md](CHANGELOG.md). Version numbers follow [semantic versioning](https://semver.org): a major number for changes that break how you use it, a minor for new features, a patch for fixes. The `version` of Ops Control in the marketplace matches the release; Sidequest and prismantis keep their own upstream version numbers.
 
+Releases are cut automatically: after each push to `main` that changes something under `plugins/` or `.claude-plugin/`, the [Release workflow](.github/workflows/release.yml) raises Ops Control's patch number, adds a CHANGELOG entry from the commit subjects (unless one for that version was written by hand), and tags and publishes the release. For a minor or major release, raise the version in `plugins/ops-control/.claude-plugin/plugin.json` yourself; the workflow tags it as is. Pull afterwards (`git pull`), since the workflow pushes its release commit to `main`.
+
 - **Latest:** `/plugin marketplace add Hanafubuki/ops-control` (or the one-command install) follows `main`, and `/plugin marketplace update ops-control` brings in new releases.
 - **A specific release:** pin the marketplace to its tag, then install as usual:
 
