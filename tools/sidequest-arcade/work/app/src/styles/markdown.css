@@ -1,0 +1,54 @@
+/* Rendered markdown (ticket descriptions and comments). Tailwind's preflight strips heading
+   sizes, list markers and margins, so everything a markdown viewer shows is set here. */
+.markdown { min-width: 0; color: var(--text); font-size: .88rem; line-height: 1.6; overflow-wrap: anywhere; }
+.markdown > :first-child { margin-top: 0; }
+.markdown > :last-child { margin-bottom: 0; }
+.markdown :is(p, ul, ol, blockquote, table, dl, .code-block, hr) { margin: 0 0 .9em; }
+
+.markdown :is(h1, h2, h3, h4, h5, h6) { margin: 1.5em 0 .6em; font-weight: 700; line-height: 1.3; letter-spacing: .01em; }
+.markdown h1 { padding-bottom: .3em; border-bottom: 2px solid; border-image: var(--gradient) 1; font-size: 1.45em; }
+.markdown h2 { padding-bottom: .25em; border-bottom: 2px solid var(--border); color: var(--accent); font-size: 1.2em; }
+.markdown h3 { color: var(--cyan); font-size: 1.06em; }
+.markdown :is(h4, h5, h6) { color: var(--text-muted); font-size: .92em; letter-spacing: .06em; text-transform: uppercase; }
+
+.markdown :is(ul, ol) { padding-left: 1.6em; }
+.markdown ul { list-style-type: "▸  "; }
+.markdown ul ul { list-style-type: "◆  "; }
+.markdown ul ul ul { list-style-type: "·  "; }
+.markdown ol { list-style-type: decimal; }
+.markdown ol ol { list-style-type: lower-alpha; }
+.markdown ul > li::marker { color: var(--accent); }
+.markdown ul ul > li::marker { color: var(--cyan); }
+.markdown ol > li::marker { color: var(--cyan); font-weight: 700; }
+.markdown li + li { margin-top: .3em; }
+.markdown li > :is(ul, ol) { margin: .3em 0 0; }
+.markdown li > p { margin: .3em 0; }
+.markdown li:has(> input[type="checkbox"]) { list-style-type: none; }
+.markdown li > input[type="checkbox"] { margin: 0 .5em 0 -1.4em; vertical-align: -.1em; accent-color: var(--success); }
+
+.markdown strong { font-weight: 800; }
+.markdown em { color: var(--agent); }
+.markdown del { color: var(--text-muted); }
+.markdown a { color: var(--cyan); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: .2em; }
+.markdown a:hover { color: var(--accent); }
+
+.markdown code { padding: .1em .35em; border-radius: var(--radius); background: color-mix(in srgb, var(--cyan) 11%, transparent); color: var(--cyan); font: .9em var(--font-mono); overflow-wrap: anywhere; }
+.markdown .code-block { overflow: hidden; border: var(--border-width) solid var(--border); border-radius: var(--radius); background: var(--surface-muted); }
+.markdown .code-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .2rem .25rem .2rem .7rem; border-bottom: 1px solid var(--border); font-size: .72rem; }
+.markdown .code-lang { color: var(--accent); font-weight: 700; letter-spacing: .06em; text-transform: lowercase; }
+.markdown .code-copy { min-height: 0; padding: .12rem .55rem; border: 1px solid var(--border); border-radius: var(--radius); background: transparent; color: var(--text-muted); font: inherit; cursor: pointer; }
+.markdown .code-copy:hover { border-color: var(--accent); color: var(--accent); }
+.markdown .code-copy[data-state="copied"] { border-color: var(--success); color: var(--success); }
+.markdown .code-copy[data-state="failed"] { border-color: var(--danger); color: var(--danger); }
+.markdown pre { margin: 0; padding: .75rem .9rem; overflow-x: auto; white-space: pre; tab-size: 4; }
+.markdown pre code { padding: 0; border: 0; background: none; color: var(--text); font-size: .84rem; line-height: 1.55; overflow-wrap: normal; }
+
+.markdown blockquote { padding: .35em .9em; border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent-soft) 45%, transparent); color: var(--text-muted); }
+.markdown blockquote > :last-child { margin-bottom: 0; }
+.markdown hr { height: 2px; border: 0; background: var(--gradient); opacity: .75; }
+
+.markdown table { display: block; width: max-content; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.markdown :is(th, td) { padding: .4em .75em; border: 1px solid var(--border); text-align: left; vertical-align: top; }
+.markdown th { background: var(--surface-muted); color: var(--accent); font-weight: 700; }
+.markdown tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-muted) 55%, transparent); }
+.markdown img { max-width: 100%; height: auto; border: var(--border-width) solid var(--border); border-radius: var(--radius); }

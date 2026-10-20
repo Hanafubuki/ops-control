@@ -1,0 +1,40 @@
+{
+  "name": "ops-control",
+  "owner": {
+    "name": "Hanafubuki",
+    "url": "https://github.com/Hanafubuki"
+  },
+  "description": "Ops Control for Claude Code, with the Sidequest work board and prismantis rendering.",
+  "plugins": [
+    {
+      "name": "ops-control",
+      "source": "./plugins/ops-control",
+      "description": "A cockpit pane for plan, context, guardrails, agents, diff, music and settings; a work bar over the prompt with milestones and context; name packs and pets; keyboard navigation (Alt+1-7, arrows).",
+      "version": "1.2.0",
+      "author": { "name": "Hanafubuki", "url": "https://github.com/Hanafubuki" },
+      "homepage": "https://github.com/Hanafubuki/ops-control/tree/main/plugins/ops-control",
+      "license": "MIT",
+      "category": "productivity"
+    },
+    {
+      "name": "sidequest",
+      "source": "./plugins/sidequest",
+      "description": "Eigenwise's local work board and orchestration loop, with the arcade dashboard restyle, a Claude sessions page and comment edit/delete.",
+      "version": "6.0.2",
+      "author": { "name": "Eigenwise", "email": "kenny@eigenwise.io" },
+      "homepage": "https://github.com/Eigenwise/eigenwise-toolshed/tree/main/plugins/sidequest",
+      "license": "MIT",
+      "category": "productivity"
+    },
+    {
+      "name": "prismantis",
+      "source": "./plugins/prismantis",
+      "description": "Nahum Litvin's colorful, themeable rendering for Claude Code replies: tables, headings, code, numbers, paths and links.",
+      "version": "0.31.1",
+      "author": { "name": "Nahum Litvin", "url": "https://github.com/NahumLitvin" },
+      "homepage": "https://github.com/NahumLitvin/prismantis",
+      "license": "MIT",
+      "category": "appearance"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -4 18 18" shape-rendering="crispEdges" role="img" aria-label="Claude">
+  <!-- Clawd, the Claude Code mascot (src/lib/components/shell/clawd.ts): body, arms and four legs, then the eyes. -->
+  <path fill="#d77757" d="M2 0h12v8h-12zM0 4h2v2h-2zM14 4h2v2h-2zM3 8h1v2h-1zM5 8h1v2h-1zM10 8h1v2h-1zM12 8h1v2h-1z"/>
+  <path fill="#1f1e1d" d="M4 2h1v2h-1zM11 2h1v2h-1z"/>
+</svg>

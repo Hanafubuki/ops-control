@@ -1,0 +1,13 @@
+{
+  "name": "ops-control",
+  "version": "1.2.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.9.1",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "check": "claude plugin validate --strict . && claude plugin validate --strict .claude-plugin/plugin.json && tsc -p .",
+    "test": "claude plugin test . && node test/pack-skill.check.ts && node test/statusline-script.check.ts"
+  },
+  "devDependencies": { "typescript": "^7.0.2" }
+}

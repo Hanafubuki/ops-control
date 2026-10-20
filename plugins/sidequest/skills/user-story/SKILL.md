@@ -1,0 +1,370 @@
+---
+name: user-story
+description: >-
+  Plan and dispatch work with 3+ independently checkable pieces and a stated reason for a story or
+  wave. Bounded fixes default to one owner; small fixes in a few known files may run inline without
+  tickets. Read-only investigations need no ticket: prefer the route_recipe research spawn over native
+  Explore.
+---
+
+# user-story
+
+A guided path from "build me X" to integrated, verified work on `main`. Two ideas run through all of
+it:
+
+**The orchestrator holds the plan; executors hold implementation.** Before dispatch, the orchestrator decides
+what improvement is worth making, its concrete benefit, the approach, and boundaries. Researchers return facts
+and bounded alternatives for that judgment. Executors use ordinary local coding judgment to implement the
+selected plan, then return concrete evidence when it cannot work. They do not silently replace the agenda,
+architecture, or scope.
+
+**The ceremony scales to the evidence.** A deterministic done-oracle is enough when it covers the
+contract. Add independent review only for a named untested seam or safety-sensitive risk.
+
+Board mechanics live in the `sidequest` skill (claim lifecycle, dispatch fields, routing, publish
+transaction) and its `references/`. Read `../sidequest/references/orchestration.md` before a first
+wave. This skill is the sequence and the sizing, not a second copy of those rules.
+
+## Size it first
+
+Sizing is a call you make and state in a line, not a question you ask the user. Read these signals:
+
+- **Independently checkable pieces**: one, a handful, or many.
+- **Surfaces crossed**: one module, or store plus CLI plus MCP plus UI plus hooks plus docs.
+- **Reversibility**: a schema, migration, on-disk format, wire format, or public API is expensive to
+  undo. Internal helpers are not.
+- **Is the approach contested?** More than one defensible architecture, with real trade-offs between
+  them, is the single strongest reason to run a design panel.
+- **Blast radius**: does existing behavior change for people already using this?
+- **Stakes**: data loss, auth, money, the release path itself.
+
+A bounded fix defaults to one owner and a focused check. Small fixes in a few files at known locations may run inline without tickets. Read-only investigations need no ticket: on a routed project spawn `route_recipe(category).research` so they run on the category route; native Explore or general-purpose agents stay for tiny lookups or unrouted projects. A story or wave needs 3+ independently checkable pieces and a stated reason. A review panel needs a named risk for each lens.
+
+Three sizes, and what each dial does at each:
+
+| Dial | One ticket | One wave | Multi-wave |
+| --- | --- | --- | --- |
+| Recon | inline `Read`/`Grep`/`Explore` | plus one exploration ticket when the seam is unclear | 2-3 parallel exploration tickets on distinct angles |
+| Questions | none, state assumptions | one batched round if a contract-changing call exists | one batched round, expect a real decision |
+| Design | write the contract yourself | one planning or spike ticket when the approach is open | 2-3 competing proposals, judged and merged into one contract |
+| Backlog | one ticket, no story | story plus the wave's full backlog | story plus the full backlog for every wave, dependency-linked |
+| Execution | one executor | one parallel wave | wave after wave, re-planned between |
+| Review | the done-oracle | a `review-audit` only for a named untested seam | a `review-audit` only where the contract names a seam it cannot test |
+| Integration | integrate and close | integrate the wave, one combined full gate | integrate per wave, one combined full gate per wave, decisions logged between |
+
+Escalate mid-flight when evidence says so. A spike that comes back reporting the seam is worse than
+expected raises the size; write that in the story log so the jump is on the record and not a vibe.
+De-escalating is equally fine: if the panel converges on one obvious answer, stop paying for the
+panel.
+
+## Planning checkpoint
+
+Before dispatching a substantial or ambiguous feature, put one visible, pinned contract on the story,
+a planning ticket, or the ticket descriptions. It is the handoff from planning to execution, not a
+second design process. For substantial or safety-sensitive work, first check architecture and feasibility
+before expensive implementation or tests: use the preflight in
+`../sidequest/references/ticket-authoring.md`. Consume evidence from the project's configured quality gate, if any, through its dedicated owner,
+check genuine native baseline/candidate ownership and the oracle's real deadline/resource fit. Small
+deterministic fixes keep one owner and a focused check; no mandatory planning panel. Pin:
+
+- **Outcome and explicit non-goals**, so later work has a boundary to cut against.
+- **Smallest authority and intervention**, the actual call flow and source of truth that decide behavior.
+  Question whether a change is needed; reuse local code, stdlib, native features, or installed dependencies;
+  make one minimal shared-root fix. Prefer measured deletion over hypothetical guards, forced extractions,
+  and unrelated cleanup. Preserve validation at trust boundaries, data-loss prevention, accessibility,
+  permissions, and immutable candidate/review authority.
+- **Surgical boundaries**, the files each piece may change and every public surface it may expose or
+  deliberately leave alone.
+- **A bounded executable done-oracle per piece**, the behavior it observes, and the named consumer or
+  regression input that would fail if the piece were wrong.
+- **Review budget**, from the sizing table, including the exact reason an oracle alone is enough or the
+  lens a review ticket must cover.
+- **Design-reopen evidence**, concrete findings that would invalidate the contract, such as a consumer
+  that cannot use the pinned seam, a required compatibility break, or an oracle that cannot observe the
+  claimed outcome.
+
+Exact small work keeps one owner: state the outcome and oracle, then work inline when bounded to a few known files. A
+pinned contract does not earn proposal theater. Write one authored contract for settled work; use two
+or three bounded proposals only when the approach is genuinely contested.
+
+## The shape
+
+1. Frame the outcome, check this flow applies, and state the size.
+2. List the unknowns, then recon: sub-agents resolve what the code can answer.
+3. One question round for what they could not, or none.
+4. Design: write the contract, or run a panel and merge the winner.
+5. Story plus the complete backlog for every planned wave, filed before anything dispatches.
+6. Dispatch each ready wave in full, keep routine supervision quiet, allow declared live advice, and re-plan between waves.
+7. Review at the sized depth, integrate by oracle, publish, close out.
+
+Track these with the task tools so the user can see where the feature is.
+
+---
+
+## 1. Frame it
+
+Say back the outcome in a line or two, name the surfaces it touches, and state the size with the
+signal that drove it ("multi-wave: this changes the on-disk format, so the migration has to land
+before anything reads it"). That framing is what every later step is cut against, so a vague frame
+produces vague tickets.
+
+Drop out of this flow when it does not fit, and say so plainly:
+
+- Operational asks (run the build, start the dev server, open the dashboard, answer from what is
+  already on screen): just do them.
+- A small bounded fix in a few known files: edit inline and run a focused check.
+- A single bug with a known cause: keep one owner, inline when it fits the bounded path.
+
+## 2. Unknowns first, then recon, bounded
+
+Before any reading, write down what the request leaves unclear: the outcome itself, which existing
+behavior it replaces, who consumes the result, what "done" looks like, and anything the user said in a
+way that has two readings. Then sort each unknown by who can answer it. The codebase, the git history,
+or an external source answers most of them; only the user answers the rest. That sort decides the next
+two steps: unknowns the code can answer become exploration tickets, and unknowns only the user can
+answer become the question round. Do not guess at either kind and call the guess a contract.
+
+Recon answers exactly one question: **what does the contract need to say?** Stop the moment you can
+write the shared interfaces, the file boundaries, and a verify command per piece.
+
+Launch one read-only sub-agent per code-answerable unknown, in parallel, and let them run while you
+write the contract skeleton. In the orchestrator, bounded recon may `Read`, `Glob`, or `Grep` named anchors and make one narrow location sweep. Route unfamiliar path tracing, deep investigation, or multi-angle research through the live taxonomy: use a read-only `codebase-exploration` ticket for repository behavior, `source-lookup` for a bounded external question, or `evidence-research` when sources need reconciliation. Give each ticket one distinct angle and run independent investigations in parallel. At
+multi-wave size the angles that earn their keep are the closest existing feature traced end to end,
+the extension point and who else depends on it, and the convention plus test pattern to match.
+
+Give an exploration ticket a deliverable, not a topic. It should come back with anchors as
+`file:line`, the seam to extend, the convention to copy, the existing verify command, and the
+consumers that would break. Findings return as compressed comments of roughly one to two thousand
+tokens.
+
+Then build the contract from those findings. Do not go read every file they named. That habit is what
+makes the expensive loop expensive, and it buys nothing the finding did not already carry. When a
+finding is too thin to write a contract from, the fix is a sharper deliverable on the next exploration
+ticket, not the orchestrator crawling the tree itself.
+
+## 3. One question round, or none
+
+The question round is what is left of the unknowns list after the sub-agents report: the ambiguities
+that neither the code nor the sources could settle. Ask them together in a single `AskUserQuestion`
+(up to four), each carrying what the investigation found so the user decides from evidence instead of
+from the same uncertainty you started with. Ask when the answer changes user-visible behavior,
+compatibility, migration, public API, dependencies, or expensive-to-reverse scope, and ask when the
+request itself is unclear enough that two careful readers would build different things. One round
+respects the user's attention and gets better answers, because they see the whole shape of the decision
+at once. Asking one question per ambiguity trains them to stop reading. Asking before the sub-agents
+report wastes the round on things the code would have answered.
+
+Worth asking: a user-visible behavior with two defensible answers, a scope boundary that changes how
+much gets built, a compatibility break, a data migration, anything else expensive to reverse.
+
+Not worth asking: naming, file layout, test placement, error copy, ordering, and every other call you
+can make and change later. State the assumption in the contract and keep going. Explicit phrases such
+as "do your thing", "use your judgment", or "whatever you think" delegate the current feature: pick,
+record the pick, and move on. They do not create a durable standing preference.
+
+This is where the generic flow is deliberately narrowed. It waits for answers before designing;
+Sidequest defaults autonomous, because a stalled feature costs the user more than a decision they can
+correct at review. That default covers calls you can make and change later. It never covers an unclear
+outcome: a contract guessed from a request nobody understood is a full wave of work in the wrong
+direction, and one question is cheaper than that.
+
+## 4. Design: contract, or a panel
+
+The output of this step is always the same artifact: **one contract**. What changes with size is how
+much you spend arriving at it.
+
+**When the approach is settled**, write it. Three proposals for a foregone conclusion is three tickets
+of cost for an answer you already had.
+
+**When the approach is genuinely contested** and hard to reverse, run a design panel. Two or three
+`spike-investigation` tickets, `readonly: true`, same problem, deliberately different mandates:
+
+- **Smallest change**: maximum reuse of what already exists, least new surface.
+- **Cleanest seams**: what you would build if this area took three more features after this one.
+- **Risk-first**: what breaks, what is hard to reverse, what the migration and rollback actually cost.
+
+They run in parallel, on category-appropriate routes, with a bounded deliverable: the seam it
+introduces, the signatures it pins, file boundaries per piece, what it costs, and what it forecloses.
+Cap each proposal at roughly two thousand tokens. Three uncapped design docs landing in the
+orchestrator's context is the failure mode the panel is supposed to avoid.
+
+Then do the orchestrator's planning work: **judge the plans and merge them.**
+Pick a spine, graft the parts of the runners-up that are better than the winner's version, and write
+one contract out of the result. A panel whose output is "we went with proposal B" wasted the other
+two; the point is that the merged contract beats every individual proposal. Record in the story log
+why the losers lost, because the next session will otherwise re-propose them.
+
+Whatever the route, a contract that makes fan-out safe pins:
+
+- **Shared surface**: the types, interfaces, and function signatures pieces hand each other, written
+  out. This is the whole reason parallel executors compose instead of producing five conflicting
+  interpretations of the same seam.
+- **File boundaries per piece**, the blast radius each piece may touch, and any committed build output. Content-hashed output gets one rebuild ticket per wave.
+- **Dependency order**, so `ready` partitions the backlog into waves by itself.
+- **The exact scoped verify command per piece**, runnable and deterministic. The integrator runs the full merged-tree gate once per wave.
+- **Shared runtime resources**: fixed ports, servers, databases, fixture paths. Worktrees isolate
+  files, not runtime. Name the shared resource and current holder; serialize commands using it,
+  not entire tickets. Non-owners continue independent read/edit/commit work, record readiness, and
+  end the turn retaining their claim until the parent explicitly hands off. Heavy commands use
+  at most two workers, finite owned deadlines, and descendant cleanup, within the two-core heavy budget.
+
+Present the chosen approach and its main trade-off in a few lines. Ask for approval only when the
+choice is expensive to reverse: a schema or migration, a public API, a user-visible default, a new
+dependency. Otherwise state what you picked and proceed.
+
+Read-only native agents can resolve unclear call flows without tickets. Keep one owner once the bounded fix is clear. Use investigation tickets when routed execution or durable board tracking is useful.
+
+## 5. Story plus the whole backlog
+
+One owner covers a bounded fix. Inline work is allowed for small fixes in a few known files. A story or wave requires 3+ independently checkable pieces and a stated reason. For that admitted wave, pin the contract and every planned ticket under the story before the first dispatch: category from the live taxonomy, file scope, anchors,
+exact scoped verify, and `depends-on` links. Never hand-pick a model or effort.
+
+Filing the whole thing up front is what makes the plan steerable. The user sees the entire feature on
+the board and can cut, reorder, or reshape it while that is still cheap. Drip-filing one ticket,
+dispatching, waiting, then filing the next hides the plan and serializes work that had no reason to be
+serial.
+
+At multi-wave size the shape that usually works:
+
+- **Wave 1 pins the shared surface in code**: the types, the schema and its migration, the seam
+  itself. Once this is real, wave 2 physically cannot diverge from it.
+- **Wave 2 is the wide parallel wave**: every independent piece built against that surface.
+- **Wave 3 is the work that can only exist once the pieces do**: end-to-end tests, UI wiring, the
+  performance pass, the docs.
+
+You do not declare those waves anywhere. Dependency links make them, and `ready` hands you each one.
+
+Each description is a developer-to-developer spec: anchors, behavior and edge cases, bounds, decisions
+already made, the reproduction if it is a bug, and the verify command. Front-load evidence so the executor
+starts from the selected plan rather than re-deciding it.
+
+A feature almost always has a docs piece. Any change to what a user sees or does either updates the
+affected prose page inside the story or gets a linked ticket classified from the live taxonomy. Decide
+that here, while the backlog is being written, not at ship time.
+
+Flag the tickets that deserve `highStakes: true` now: data loss, auth, money, the release path, an
+irreversible migration. That flag is what pulls deeper verification and a required review pass into
+the ticket instead of relying on you to remember at the end.
+
+Size implementation plus final verification to fit comfortably before 75 tool rounds; otherwise
+split along actual cohesive boundaries before dispatch. A resource pause does not automatically
+release/restart an executor or prove death.
+
+## 6. Run the waves
+
+Fresh `dispatch <ref>` per ticket, every spawn field passed through unchanged, all of it in one
+message so the wave actually runs in parallel. Dispatch everything whose dependencies are met.
+Same-file overlap across isolated worktrees deserves a look, not automatic serialization.
+
+Then leave routine supervision quiet: no pulses, comment reads or arbitrary worktree peeks between
+dispatch and submission. Explicitly assigned builders and readonly advisors may collaborate directly
+through available native messaging and inspect authorized source snapshots under
+`../sidequest/references/readonly-guidance.md`. Advice stays advisory; final `review-audit` acceptance
+still binds the terminal immutable submission. Preauthorize ordinary implementation/check/measurement
+steps within the contract, with one producer owning capture and submit. Pause only the blocked step;
+continue unaffected source work. Relay real scope/resource/authority decisions, not routine checkpoint
+or acknowledgement loops. Executors report on their own, and `changes --since` is the read when needed.
+Steer instead of restarting: answer scope
+requests, use `SendMessage` for what a message can fix, and never stop-then-redispatch work that is
+still moving. For resource transfers, require the actual owner's acknowledgement that its owned
+heavy command and descendants ended, then a parent `SendMessage` naming the next holder. A terminal
+submit/done/release suffices when it really ends owned work; an authenticated explicit mid-claim
+return is valid too. Never infer availability from elapsed time, process counts, failed sends,
+model labels, or absence.
+
+Comment `since` is exclusive and only a read cursor. Include the exact instruction/comment in a
+handoff or direct bounded inclusive/all-comments recovery; advance the processed cursor only after
+consuming instructions, not merely observing a watermark.
+
+When a confirmed blocker falls within the user's delegated work, dispatch its existing ticket once
+ready. If preparation is needed, start that preparation rather than ending with a status report. If
+blocked, record the concrete dependency, responsible owner, and condition for resuming. Unrelated CI
+or review is not a dependency. Acknowledging a report or raising its priority does not transfer
+ownership. Preserve permission boundaries and required review throughout.
+
+**Between waves is where re-planning belongs.** Close the wave (every ticket integrated or explicitly
+deferred), read the story log for what the wave learned, then promote each finding needed by the next
+executor into that ticket's description, dependency contract, comment, or the story execution contract
+before dispatching it. The story log is orchestrator planning history, never executor orientation. It
+automatically archives older entries when its live briefing window fills; use `full: true` to read that
+archive with the live log. Adjust the next wave's tickets after that promotion. That is legitimate
+precisely because those tickets already exist and the user could see them; it is the opposite of
+inventing the plan one ticket at a time. New discoveries become normal tickets, linked into the wave
+they belong to.
+
+A wave that straggles on one ticket while you sit idle is a sizing error, not a reason to poke it.
+Note it, and cut thinner slices next time.
+
+## 7. Review at the sized depth, then integrate
+
+The floor is always the same: read the submission report, deliver the range, and run the merged-tree
+full gate once for the wave before versioning. Preserve the real pinned delivery verifier; reuse
+assembled-tree proof only under the runtime's exact authority checks. A changed tree after rebase
+needs a fresh gate. On green, finish the publish transaction under the publish lock.
+
+How much review sits on top of that floor scales with the work:
+
+- **One ticket, deterministic oracle**: the oracle is the review. Adding a review pass to a passing
+  deterministic verify buys nothing.
+- **Named uncertainty or safety-sensitive seam**: add a `review-audit` only when the done-oracle
+  cannot exercise a stated seam, such as a consumer the wave did not test. The contract names the
+  seam and the review mandate. A required high-stakes review also applies. Multiple lenses need
+  distinct named risks, never merely multiple waves. Bind required candidate reviews before delivery
+  and preserve the immutable candidate and source-review guards.
+
+Give reviewers an adversarial mandate: try to break the named seam, identify the failing input or
+broken consumer, and record evidence. Review verifies the pinned contract and its oracle, never silently
+expands the active feature. Route unrelated concerns into separately prioritized tickets; they block this
+ship only when the contract or a proven regression requires it. Findings that do block ship become fix
+tickets, and their verdicts land as comments starting `reviewed-by:`.
+
+After two independently rejected candidates in one defect chain, stop local patching. Re-plan, narrow
+the contract, or replace the authority or architecture before another candidate. Involve the user when
+the current feature was not delegated.
+
+Through all of it, do not reopen the diff yourself. Judging code you did not write, on the priciest
+model in the loop, is slower and less reliable than the verify command the ticket already carried and
+the reviewer whose whole job it was. You judge plans and route fixes.
+
+## Close out
+
+- **Docs**: the prose page updated, or the linked docs ticket on the board. A user-facing change with
+  no docs ticket is not done.
+- **Decisions**: log the contract calls, the rejected proposals and why, and the assumptions you made
+  without asking, on the story, so the next session inherits the reasoning instead of re-deriving it.
+- **A short report**: what shipped, the refs, the decisions that matter, and anything deferred with
+  the reason.
+
+---
+
+## Coming from a generic feature-dev flow
+
+Same beats, different owner for each, and every one of them sized:
+
+| Generic flow | Here |
+| --- | --- |
+| Parallel explorer agents reporting into main context | `codebase-exploration` tickets returning compressed findings |
+| Orchestrator reads every file the explorers named | contract written from the findings |
+| Ask, then wait, per ambiguity | one batched round for contract-changing calls only |
+| Three architect agents, always, then pick one | a panel when the approach is contested, and the winner gets merged with the runners-up |
+| Orchestrator implements the chosen design | story, full backlog, one or many parallel waves |
+| Three reviewer agents on the finished diff, always | done-oracle, plus a `review-audit` for a named untested seam |
+| Summary | integrate per wave, publish, docs, story decisions, report |
+
+## Failure modes worth naming
+
+- **"I already have the context, I'll just write it."** The cheapest-looking move in the moment and
+  the most expensive over the feature. Loaded context is not a reason to inline.
+- **One size for everything.** A blanket review panel on a new flag is theater; an untested seam on a
+  format migration needs named scrutiny. Both are the same mistake.
+- **A panel that picks a winner and discards the rest.** Merge, or do not run the panel.
+- **Reading the whole subsystem before filing anything.** Recon has a stopping condition: the contract
+  is writable.
+- **Guessing past an unclear request.** An unknown the code could have answered gets a sub-agent; one
+  only the user can answer gets asked. Neither gets an assumption dressed up as a contract.
+- **A backlog that grows one ticket at a time.** Nobody can steer a plan they cannot see.
+- **Polling.** Pulses, worktree peeks, or a shell loop waiting on an executor. Reports arrive on their
+  own.
+- **Re-reviewing the wave's diffs yourself.** That is what the verify command and a contract-required
+  review ticket are for.
+- **Shipping without the docs decision.** Cheap while the backlog is open, annoying at ship time.

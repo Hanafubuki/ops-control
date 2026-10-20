@@ -1,0 +1,85 @@
+size 8x8
+
+palette
+s #26262e
+u #55555f
+Z #aab0c8
+O #1b1214
+W #fff4ec
+G #4eba65
+g #2f6e3d
+end
+
+anim pulse loop exits=0
+frame 150 head=0,0
+........
+..uuuuuu
+..uuOOuu
+..uZZZZu
+..ZZOOZZ
+..ZZOOZZ
+..uZZZZu
+..ssssss
+frame 100 head=0,0
+........
+........
+..uuuuuu
+.GZZZZZZ
+.GZZWWZZ
+.GZWOOWZ
+.GZZZZZZ
+..ssssss
+frame 120 head=0,0
+.G......
+G.uuuuuu
+G.uuOOuu
+G.uZZZZu
+G.ZZOOZZ
+G.ZZOOZZ
+.GuZZZZu
+..ssssss
+frame 130 head=0,0
+........
+g.uuuuuu
+..uuOOuu
+g.uZZZZu
+..ZZWOZZ
+g.ZZOOZZ
+..uZZZZu
+..ssssss
+frame 150 head=0,0
+........
+..uuuuuu
+..uuWWuu
+..uZZZZu
+..ZZOOZZ
+..ZZOOZZ
+..uZZZZu
+..ssssss
+frame 100 head=0,0
+...G.G..
+........
+..uuuuuu
+..ZZZZZZ
+.GZWWWWZ
+.GZWOOWZ
+..ZZZZZZ
+..ssssss
+frame 120 head=0,0
+..G...G.
+...G.G..
+G.uuuuuu
+.GuZZZZu
+..ZZOOZZ
+.GZZOOZZ
+G.uZZZZu
+..ssssss
+frame 130 head=0,0
+.g.....g
+........
+..uuuuuu
+..uuOOuu
+g.uZZZZu
+..ZZOWZZ
+g.uZZZZu
+..ssssss

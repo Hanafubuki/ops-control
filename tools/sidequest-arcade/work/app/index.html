@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en" data-palette="arcade" data-theme="dark" data-corners="hard">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sidequest</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Stored theme before the first paint; mirrors readAppearance + applyAppearance in src/lib/state/appearance.ts. -->
+    <script>try { var root = document.documentElement, palette = localStorage.getItem('sq_arcade_palette'); if (/^(arcade|clean|tokyo-night|catppuccin-(mocha|latte|frappe|macchiato))$/.test(palette || '')) root.dataset.palette = palette; root.dataset.theme = root.dataset.palette === 'catppuccin-latte' ? 'light' : /^catppuccin-/.test(root.dataset.palette) ? 'dark' : localStorage.getItem('sq_arcade_theme') === 'light' ? 'light' : 'dark'; root.dataset.corners = localStorage.getItem('sq_arcade_corners') === 'soft' ? 'soft' : 'hard'; } catch {}</script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

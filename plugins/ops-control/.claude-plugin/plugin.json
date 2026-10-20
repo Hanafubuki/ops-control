@@ -1,0 +1,23 @@
+{
+  "name": "ops-control",
+  "version": "1.2.0",
+  "description": "Ops Control for Claude Code: a cockpit pane for changes, subagents and context, an activity band, and shareable themes.",
+  "author": {
+    "name": "Hanafubuki",
+    "url": "https://github.com/Hanafubuki"
+  },
+  "homepage": "https://github.com/Hanafubuki/ops-control/tree/main/plugins/ops-control",
+  "repository": "https://github.com/Hanafubuki/ops-control",
+  "license": "MIT",
+  "keywords": ["theme", "skin", "visualizer", "animation", "eye-candy", "mod"],
+  "types": "./types/state.d.ts",
+  "userConfig": {
+    "theme": { "type": "string", "title": "Theme", "description": "Theme name: ops-control, aurora, dusk, classic, cyberpunk, vaporwave, high-contrast, or one in ~/.claude/ops-control/themes", "default": "classic" },
+    "reducedMotion": { "type": "boolean", "title": "Reduced motion", "description": "No shimmer or spinner animation from ops-control", "default": false },
+    "pack": { "type": "string", "title": "Pack", "description": "Pack name: classic, crt, cozy, arcade, or one in ~/.claude/ops-control/packs", "default": "classic" },
+    "spinner": { "type": "string", "title": "Spinner", "description": "Spinner name: stock, comet, eyes, orb-states, clawd, shimmer, scanline, ring, glitch, signal, or pack for the pack's own", "default": "pack" },
+    "pet": { "type": "string", "title": "Pet", "description": "clawd, robot, ghost, lelouch, shikamaru, gojo, levi, off, or a pet in ~/.claude/ops-control/pets", "default": "clawd" },
+    "bubbles": { "type": "string", "title": "Speech bubbles", "description": "on (template lines), off, or haiku (Claude Haiku writes some lines; small paid calls on your account)", "default": "on" },
+    "statusline": { "type": "string", "title": "Status line fields", "description": "Comma-separated, in order: activity, ctx, 5h, week, cost, model, effort, agents, plan, branch, changes, cwd, level, music. A / starts a second line.", "default": "activity,ctx,effort,5h,week" }
+  }
+}

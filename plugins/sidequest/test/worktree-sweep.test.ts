@@ -1,0 +1,185 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { withWorktreeSweepLock, worktreeRemovalFailureNotice } from '../src/hooks/shared/worktree-sweep.js';
+import { deferralNotice } from '../src/hooks/shared/sweep-handoff.js';
+const { worktreeSweepEntryLine, worktreeSweepProgressLine, worktreeSweepReasonSummary } = require('../src/bin/sidequest-cmd-collaboration.ts');
+
+const removalFailure = { path: 'C:\\worktrees\\agent-locked', message: 'Invalid argument' };
+
+test('worktree removal failure reports Windows processes still using the directory', () => {
+  const notice = worktreeRemovalFailureNotice(removalFailure, {
+    platform: 'win32',
+    existsSync: () => true,
+    listProcesses: () => [{
+      pid: 4201,
+      imageName: 'python.exe',
+      startTime: '20260813120000.000000+000',
+      cpuSeconds: 846,
+      command: 'C:/worktrees/agent-locked/.venv/Scripts/python.exe worker.py',
+    }],
+  });
+
+  assert.match(notice, /could not remove C:\\worktrees\\agent-locked: Invalid argument/);
+  assert.match(notice, /pid 4201 \(python\.exe, started 20260813120000\.000000\+000, CPU 846s\)/);
+  assert.match(notice, /End those PIDs and re-run the sweep/);
+});
+
+test('successful worktree removal does not query Windows processes', () => {
+  let queried = false;
+  const notice = worktreeRemovalFailureNotice({ path: null, message: 'unused' }, {
+    platform: 'win32',
+    existsSync: () => true,
+    listProcesses: () => {
+      queried = true;
+      return [];
+    },
+  });
+
+  assert.equal(notice, 'could not remove a git entry: unused');
+  assert.equal(queried, false);
+});
+
+test('non-Windows worktree removal failure keeps the existing notice', () => {
+  let queried = false;
+  const notice = worktreeRemovalFailureNotice(removalFailure, {
+    platform: 'linux',
+    existsSync: () => true,
+    listProcesses: () => {
+      queried = true;
+      return [];
+    },
+  });
+
+  assert.equal(notice, 'could not remove C:\\worktrees\\agent-locked: Invalid argument');
+  assert.equal(queried, false);
+});
+
+
+test('worktree sweep rows print known facts without placeholder values', () => {
+  const row = worktreeSweepEntryLine({
+    action: 'keep',
+    path: 'C:\\worktrees\\agent-legacy-dirty',
+    ticket: null,
+    reason: 'legacy_unreclaimed',
+    clean: false,
+    ahead: 2,
+    patchEquivalent: false,
+    ageMs: 4 * 60 * 60 * 1000,
+  });
+
+  assert.match(row, /legacy_unreclaimed; dirty; ahead 2; patch-equivalent false; age 240m/);
+  assert.doesNotMatch(row, /\?/);
+});
+
+
+// A bare `dependency_link_untrusted` named no link and no target, so 29 retained trees read as one
+// unexplained refusal and nobody could tell which link to release (SQ-21).
+test('a sweep row prints the dependency link refusal detail after its reason code', () => {
+  const row = worktreeSweepEntryLine({
+    action: 'keep',
+    path: 'C:\\worktrees\\agent-linked',
+    ticket: 'SQ-21',
+    reason: 'dependency_link_untrusted',
+    detail: 'node_modules/shared escapes worktree -> C:\\store\\shared',
+    clean: true,
+    ahead: 0,
+    patchEquivalent: false,
+    ageMs: 60 * 60 * 1000,
+  });
+
+  assert.equal(row, '  KEEP C:\\worktrees\\agent-linked SQ-21 [dependency_link_untrusted: node_modules/shared escapes worktree -> C:\\store\\shared; clean; ahead 0; patch-equivalent false; age 60m]');
+});
+
+test('deferred SessionStart sweep reports active classification and the finishing command', () => {
+  const notice = deferralNotice('C:/repo', {
+    phase: 'classifying',
+    candidates: 8,
+    observed: 3,
+    current: 'C:/worktrees/agent-slow',
+    reason: 'legacy_unreclaimed',
+    planned: 4,
+    removed: 2,
+    keptByReason: { legacy_unreclaimed: 1, active_ticket: 3 },
+  });
+
+  assert.match(notice, /Classifying 3\/8: C:\/worktrees\/agent-slow \(legacy_unreclaimed\)/);
+  assert.match(notice, /Reached planned 4, removed 2, skipped 4 \(legacy_unreclaimed 1, active_ticket 3\)/);
+  assert.match(notice, /worktrees sweep --yes --project/);
+});
+
+test('manual worktree sweep progress names the classification candidate and reason', () => {
+  const line = worktreeSweepProgressLine({
+    phase: 'classifying',
+    candidates: 8,
+    observed: 3,
+    current: 'C:/worktrees/agent-slow',
+    reason: 'legacy_unreclaimed',
+    planned: 0,
+    removed: 0,
+    keptByReason: {},
+  });
+
+  assert.equal(line, 'worktrees sweep: classifying 3/8: C:/worktrees/agent-slow (legacy_unreclaimed); planned 0, removed 0');
+});
+
+// GH-439: a 150-tree `worktrees sweep --yes` scrolled every row past and ended on the last failure,
+// so the run closes with one count per reason, most frequent first.
+test('a manual sweep ends with its count per classification reason', () => {
+  const line = worktreeSweepReasonSummary([
+    { reason: 'ticket_closed_settled' },
+    { reason: 'status_unknown' },
+    { reason: 'ticket_closed_settled' },
+    { reason: 'active_ticket' },
+  ]);
+
+  assert.equal(line, '  by reason: ticket_closed_settled 2, active_ticket 1, status_unknown 1');
+  assert.equal(worktreeSweepReasonSummary([]), '  by reason: no candidates');
+});
+
+// A SessionEnd sweep and the next SessionStart sweep run back to back on /clear; the lock keeps
+// them from quarantining the same trees twice (SQ-51).
+async function sweepUnderLockFile(lockContents: string | null): Promise<{ result: string[]; ran: boolean; lockAfter: string | null }> {
+  const previousHome = process.env.SIDEQUEST_HOME;
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'sq-sweep-lock-'));
+  const lockFile = path.join(home, 'worktree-sweep.lock');
+  process.env.SIDEQUEST_HOME = home;
+  try {
+    if (lockContents !== null) fs.writeFileSync(lockFile, lockContents);
+    let ran = false;
+    const result = await withWorktreeSweepLock(async () => {
+      ran = true;
+      return ['swept'];
+    });
+    return { result, ran, lockAfter: fs.existsSync(lockFile) ? fs.readFileSync(lockFile, 'utf8') : null };
+  } finally {
+    process.env.SIDEQUEST_HOME = previousHome;
+    fs.rmSync(home, { recursive: true, force: true });
+  }
+}
+
+test('a sweep lock held by a live process skips the sweep and leaves the lock alone', async () => {
+  const held = await sweepUnderLockFile(String(process.pid));
+
+  assert.equal(held.ran, false);
+  assert.deepEqual(held.result, []);
+  assert.equal(held.lockAfter, String(process.pid));
+});
+
+test('a sweep lock left by a dead process is cleared and the sweep runs', async () => {
+  const stale = await sweepUnderLockFile('99999999');
+
+  assert.equal(stale.ran, true);
+  assert.deepEqual(stale.result, ['swept']);
+  assert.equal(stale.lockAfter, null);
+});
+
+test('a sweep lock with unreadable contents is cleared and the sweep runs', async () => {
+  const garbage = await sweepUnderLockFile('not a pid');
+
+  assert.equal(garbage.ran, true);
+  assert.deepEqual(garbage.result, ['swept']);
+  assert.equal(garbage.lockAfter, null);
+});

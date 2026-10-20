@@ -1,0 +1,9 @@
+
+test/ export-ignore
+docs/ export-ignore
+justfile export-ignore
+pnpm-lock.yaml export-ignore
+tsconfig.json export-ignore
+types/vendor/ export-ignore
+CONTRIBUTING.md export-ignore
+CODE_OF_CONDUCT.md export-ignore

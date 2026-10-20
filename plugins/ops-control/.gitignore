@@ -1,0 +1,27 @@
+node_modules/
+coverage/
+*.tsbuildinfo
+*.tgz
+.env
+.env.*
+!.env.example
+
+# Agent working files
+.superpowers/
+docs/superpowers/
+.impeccable/
+.claude/settings.local.json
+.claude/worktrees/
+
+# Claude Code writes these on every load of the mod
+.claude-plugin/types/
+
+# `just pet-build` output
+art/*/viewer.html
+art/*/*-sheet@8x.png
+
+# `just installer-build` output
+installer/glowup-installer
+
+# `just demo-render` output
+demo/out/

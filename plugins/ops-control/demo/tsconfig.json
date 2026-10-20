@@ -1,0 +1,13 @@
+{
+  "extends": "@revideo/core/tsconfig.project.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "jsxImportSource": "@revideo/2d/lib",
+    "types": ["node"],
+    "target": "es2022",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true
+  },
+  "include": ["src", "render.ts", "vite.config.ts"]
+}

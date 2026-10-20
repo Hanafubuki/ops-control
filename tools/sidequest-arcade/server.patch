@@ -1,0 +1,119 @@
+diff -ruN upstream/lib/server.js work/lib/server.js
+--- upstream/lib/server.js	2026-10-20 16:00:44.287807290 +0200
++++ work/lib/server.js	2026-10-20 16:04:32.040308400 +0200
+@@ -948,6 +948,43 @@
+     sendJson(res, 201, result);
+     return;
+   }
++  const ce = /^\/api\/tickets\/([^/]+)\/comment\/([^/]+)$/.exec(pathname);
++  if (req.method === "PATCH" && ce) {
++    const slug = q.project ? String(q.project) : null;
++    if (!slug || slug === "all") {
++      sendJson(res, 400, { error: "project query param is required" });
++      return;
++    }
++    let body;
++    try {
++      body = await readJsonBody(req);
++    } catch (e) {
++      sendJson(res, 400, { error: "bad JSON body" });
++      return;
++    }
++    const result = store.editComment(slug, ce[1], decodeURIComponent(ce[2]), { body: body.body, source: "dashboard" });
++    if (!result.ok) {
++      const payload = { error: result.reason };
++      if (result.reason === "too_long") {
++        payload.max = result.max;
++        payload.length = result.length;
++      }
++      sendJson(res, result.reason === "not_found" ? 404 : 400, payload);
++      return;
++    }
++    sendJson(res, 200, result);
++    return;
++  }
++  if (req.method === "DELETE" && ce) {
++    const slug = q.project ? String(q.project) : null;
++    if (!slug || slug === "all") {
++      sendJson(res, 400, { error: "project query param is required" });
++      return;
++    }
++    const result = store.deleteComment(slug, ce[1], decodeURIComponent(ce[2]));
++    sendJson(res, result.ok ? 200 : 404, result.ok ? result : { error: result.reason });
++    return;
++  }
+   const rm = /^\/api\/tickets\/([^/]+)\/reminder$/.exec(pathname);
+   if (rm) {
+     const slug = q.project ? String(q.project) : null;
+diff -ruN upstream/lib/store/comments.js work/lib/store/comments.js
+--- upstream/lib/store/comments.js	2026-10-20 16:00:44.337807961 +0200
++++ work/lib/store/comments.js	2026-10-20 16:04:32.040308400 +0200
+@@ -94,6 +94,38 @@
+       return { ok: true, ticket: t, comment, ...attributed.advisory ? { advisory: attributed.advisory } : {} };
+     });
+   }
++  // sidequest-arcade: replace a comment's body from the dashboard; the author and time stay, editedAt marks it.
++  function editComment(slug, idOrRef, commentId, fields) {
++    const prepared = prepareComment(fields);
++    if (!prepared.ok) return prepared;
++    const found = getTicket(slug, idOrRef);
++    if (!found) return { ok: false, reason: "not_found" };
++    return withTicketLock(slug, found.id, () => {
++      const t = getTicket(slug, found.id);
++      const comment = t && Array.isArray(t.comments) ? t.comments.find((existing) => existing.id === commentId) : null;
++      if (!comment) return { ok: false, reason: "not_found" };
++      if (comment.body === prepared.body) return { ok: true, ticket: t, comment };
++      comment.body = prepared.body;
++      comment.editedAt = (/* @__PURE__ */ new Date()).toISOString();
++      t.updatedAt = comment.editedAt;
++      putTicket(slug, t);
++      return { ok: true, ticket: t, comment };
++    });
++  }
++  // sidequest-arcade: remove one comment from the dashboard.
++  function deleteComment(slug, idOrRef, commentId) {
++    const found = getTicket(slug, idOrRef);
++    if (!found) return { ok: false, reason: "not_found" };
++    return withTicketLock(slug, found.id, () => {
++      const t = getTicket(slug, found.id);
++      const kept = t && Array.isArray(t.comments) ? t.comments.filter((existing) => existing.id !== commentId) : null;
++      if (!kept || kept.length === t.comments.length) return { ok: false, reason: "not_found" };
++      t.comments = kept;
++      t.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
++      putTicket(slug, t);
++      return { ok: true, ticket: t };
++    });
++  }
+   function linkTypePair(verb) {
+     switch (String(verb || "").toLowerCase().replace(/_/g, "-")) {
+       case "blocks":
+@@ -194,6 +226,8 @@
+   }
+   return {
+     addComment,
++    editComment,
++    deleteComment,
+     createComment,
+     isBlocked,
+     linkTickets,
+diff -ruN upstream/lib/store.js work/lib/store.js
+--- upstream/lib/store.js	2026-10-20 16:00:44.287807290 +0200
++++ work/lib/store.js	2026-10-20 16:04:32.040308400 +0200
+@@ -1339,6 +1339,8 @@
+ });
+ const {
+   addComment,
++  editComment,
++  deleteComment,
+   createComment,
+   isBlocked,
+   linkTickets,
+@@ -4161,6 +4163,8 @@
+   updateStory,
+   deleteStory,
+   addComment,
++  editComment,
++  deleteComment,
+   linkTickets,
+   unlinkTickets,
+   openBlockers,

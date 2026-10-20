@@ -1,0 +1,2366 @@
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/index.html work/app/index.html
+--- upstream/app/index.html	2026-10-20 10:03:50.867427220 +0200
++++ work/app/index.html	2026-10-20 11:58:52.630393389 +0200
+@@ -1,10 +1,12 @@
+ <!doctype html>
+-<html lang="en" data-theme="light">
++<html lang="en" data-palette="arcade" data-theme="dark" data-corners="hard">
+   <head>
+     <meta charset="UTF-8" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+     <title>Sidequest</title>
+     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
++    <!-- Stored theme before the first paint; mirrors readAppearance + applyAppearance in src/lib/state/appearance.ts. -->
++    <script>try { var root = document.documentElement, palette = localStorage.getItem('sq_arcade_palette'); if (/^(arcade|clean|tokyo-night|catppuccin-(mocha|latte|frappe|macchiato))$/.test(palette || '')) root.dataset.palette = palette; root.dataset.theme = root.dataset.palette === 'catppuccin-latte' ? 'light' : /^catppuccin-/.test(root.dataset.palette) ? 'dark' : localStorage.getItem('sq_arcade_theme') === 'light' ? 'light' : 'dark'; root.dataset.corners = localStorage.getItem('sq_arcade_corners') === 'soft' ? 'soft' : 'hard'; } catch {}</script>
+   </head>
+   <body>
+     <div id="app"></div>
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/public/favicon.svg work/app/public/favicon.svg
+--- upstream/app/public/favicon.svg	2026-10-20 10:03:50.867427220 +0200
++++ work/app/public/favicon.svg	2026-10-20 12:30:54.033472553 +0200
+@@ -1,13 +1,5 @@
+-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1216 1216" role="img" aria-label="Eigenwise">
+-  <defs>
+-    <linearGradient id="indigoGradient" x1="0" y1="0" x2="1" y2="1">
+-      <stop offset="0%" stop-color="#17162c"/>
+-      <stop offset="55%" stop-color="#222141"/>
+-      <stop offset="100%" stop-color="#2c2b50"/>
+-    </linearGradient>
+-  </defs>
+-  <rect width="1216" height="1216" rx="180" fill="var(--bg, #f4efe4)"/>
+-  <g transform="translate(234,194) scale(0.815)">
+-    <path fill="url(#indigoGradient)" d="M 12 1 H 886 C 893 1 898 6 898 13 V 205 C 898 212 893 217 886 217 H 770 C 763 217 758 212 758 205 V 143 C 758 136 753 132 747 132 H 410 C 403 132 399 136 399 143 V 392 C 399 399 403 403 410 403 H 704 C 710 403 713 399 713 392 V 345 C 713 337 722 333 728 339 L 912 501 C 916 505 916 511 912 515 L 728 681 C 722 687 713 683 713 675 V 614 C 713 607 709 603 702 603 H 410 C 403 603 399 607 399 614 V 867 C 399 874 403 878 410 878 H 747 C 753 878 758 874 758 867 V 809 C 758 802 763 797 770 797 H 886 C 893 797 898 802 898 809 V 1002 C 898 1009 893 1014 886 1014 H 12 C 5 1014 1 1009 1 1002 V 889 C 1 882 5 878 12 878 H 105 C 124 878 135 867 135 851 V 159 C 135 143 124 132 105 132 H 12 C 5 132 1 127 1 120 V 13 C 1 6 5 1 12 1 Z"/>
+-  </g>
++<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -4 18 18" shape-rendering="crispEdges" role="img" aria-label="Claude">
++  <!-- Clawd, the Claude Code mascot (src/lib/components/shell/clawd.ts): body, arms and four legs, then the eyes. -->
++  <path fill="#d77757" d="M2 0h12v8h-12zM0 4h2v2h-2zM14 4h2v2h-2zM3 8h1v2h-1zM5 8h1v2h-1zM10 8h1v2h-1zM12 8h1v2h-1z"/>
++  <path fill="#1f1e1d" d="M4 2h1v2h-1zM11 2h1v2h-1z"/>
+ </svg>
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/App.svelte work/app/src/App.svelte
+--- upstream/app/src/App.svelte	2026-10-20 10:03:50.847427119 +0200
++++ work/app/src/App.svelte	2026-10-20 11:39:11.125135795 +0200
+@@ -4,6 +4,7 @@
+   import Toolbar from './lib/components/shell/Toolbar.svelte';
+   import BoardView from './lib/components/board/BoardView.svelte';
+   import ArchiveView from './lib/components/shell/ArchiveView.svelte';
++  import SessionsView from './lib/components/sessions/SessionsView.svelte';
+   import TicketDialog from './lib/components/ticket/TicketDialog.svelte';
+   import Lightbox from './lib/components/common/Lightbox.svelte';
+   import ToastRegion from './lib/components/common/ToastRegion.svelte';
+@@ -39,6 +40,8 @@
+     <Toolbar {state} />
+     {#if state.view === 'archive'}
+       <ArchiveView {state} />
++    {:else if state.view === 'sessions'}
++      <SessionsView {state} />
+     {:else}
+       <BoardView {state} />
+     {/if}
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/api.ts work/app/src/lib/api.ts
+--- upstream/app/src/lib/api.ts	2026-10-20 10:03:50.847427119 +0200
++++ work/app/src/lib/api.ts	2026-10-20 16:05:05.620507261 +0200
+@@ -71,6 +71,8 @@
+   removeAttachments(id: string, project: string, removeAssets: string[]) { return this.updateTicket(id, project, { removeAssets }); }
+   deleteTicket(id: string, project: string) { return this.request<JsonRecord>('DELETE', `/api/tickets/${path(id)}${query({ project })}`); }
+   addComment(id: string, project: string, body: JsonRecord) { return this.request<JsonRecord>('POST', `/api/tickets/${path(id)}/comment${query({ project })}`, { by: 'you', ...body, source: 'dashboard' }); }
++  editComment(id: string, project: string, commentId: string, body: string) { return this.request<JsonRecord>('PATCH', `/api/tickets/${path(id)}/comment/${path(commentId)}${query({ project })}`, { body, source: 'dashboard' }); }
++  deleteComment(id: string, project: string, commentId: string) { return this.request<JsonRecord>('DELETE', `/api/tickets/${path(id)}/comment/${path(commentId)}${query({ project })}`); }
+   setReminder(id: string, project: string, fireAt: string) { return this.request<JsonRecord>('POST', `/api/tickets/${path(id)}/reminder${query({ project })}`, { fireAt, source: 'dashboard' }); }
+   cancelReminder(id: string, project: string) { return this.request<JsonRecord>('DELETE', `/api/tickets/${path(id)}/reminder${query({ project })}`); }
+   linkTicket(id: string, project: string, verb: string, to: string) { return this.request<JsonRecord>('POST', `/api/tickets/${path(id)}/link${query({ project })}`, { verb, to, source: 'dashboard' }); }
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/board/BoardColumn.svelte work/app/src/lib/components/board/BoardColumn.svelte
+--- upstream/app/src/lib/components/board/BoardColumn.svelte	2026-10-20 10:03:50.847427119 +0200
++++ work/app/src/lib/components/board/BoardColumn.svelte	2026-10-20 10:32:35.568355388 +0200
+@@ -18,7 +18,7 @@
+   }
+ </script>
+ 
+-<section class:drop-active={dropActive} class:done={status === 'done'} class="column" aria-label={`${status} tickets`} ondragover={(event) => { event.preventDefault(); dropActive = true; }} ondragleave={() => dropActive = false} ondrop={drop}>
++<section class:drop-active={dropActive} class:doing={status === 'doing'} class:done={status === 'done'} class="column" aria-label={`${status} tickets`} ondragover={(event) => { event.preventDefault(); dropActive = true; }} ondragleave={() => dropActive = false} ondrop={drop}>
+   <header><span class="flag"></span><h2>{status === 'todo' ? 'To do' : status}</h2><small>{tickets.length}</small>{#if status === 'done' && tickets.length}<button onclick={() => board.archiveDone()}>Archive all</button>{/if}</header>
+   <div class="cards" role="list">
+     {#each tickets as ticket (ticket.id)}
+@@ -30,5 +30,5 @@
+ </section>
+ 
+ <style>
+-  .column { min-height: 15rem; padding: 1rem; border: 1px solid color-mix(in srgb, var(--border), transparent 38%); border-radius: 5px; background: var(--surface-column); transition: border-color var(--motion-fast), background var(--motion-fast); } .column.drop-active { border-color: var(--accent); background: var(--accent-soft); } header { display: flex; align-items: center; gap: .45rem; padding: .15rem .2rem 1rem; } .flag { width: .45rem; height: .45rem; border-radius: 999px; background: var(--border-strong); } .column:not(.done) .flag { background: var(--warning); } .column.done .flag { background: var(--accent); } h2 { margin: 0; font-size: .82rem; text-transform: uppercase; letter-spacing: .08em; } header small { color: var(--text-muted); font-family: var(--font-mono); } header button { margin-left: auto; border: 0; border-radius: var(--radius); padding: .25rem .4rem; background: transparent; color: var(--accent); font: inherit; font-size: .72rem; cursor: pointer; } header button:hover { background: var(--accent-soft); } .cards { display: grid; align-content: start; gap: .625rem; min-height: 10rem; } p { margin: 1rem .2rem; color: var(--text-muted); font-size: .82rem; line-height: 1.45; }
++  .column { min-height: 15rem; padding: 1rem; border: var(--border-width) solid var(--border); border-radius: var(--radius); background: var(--surface-column); transition: border-color var(--motion-fast), background var(--motion-fast); } .column.drop-active { border-color: var(--accent); background: var(--accent-soft); box-shadow: var(--glow); } header { display: flex; align-items: center; gap: .45rem; padding: .15rem .2rem 1rem; } .flag { width: .5rem; height: .5rem; background: var(--status-todo); transform: rotate(45deg); } .column.doing .flag { background: var(--status-doing); } .column.done .flag { background: var(--status-done); } h2 { margin: 0; font-size: .8rem; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; } header small { color: var(--text-muted); font-family: var(--font-mono); } header button { margin-left: auto; border: 0; border-radius: var(--radius); padding: .25rem .4rem; background: transparent; color: var(--accent); font: inherit; font-size: .72rem; cursor: pointer; } header button:hover { background: var(--accent-soft); } .cards { display: grid; align-content: start; gap: .625rem; min-height: 10rem; } p { margin: 1rem .2rem; color: var(--text-muted); font-size: .82rem; line-height: 1.45; }
+ </style>
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/board/BoardView.svelte work/app/src/lib/components/board/BoardView.svelte
+--- upstream/app/src/lib/components/board/BoardView.svelte	2026-10-20 10:03:50.847427119 +0200
++++ work/app/src/lib/components/board/BoardView.svelte	2026-10-20 10:32:35.568355388 +0200
+@@ -26,5 +26,5 @@
+ {/if}
+ 
+ <style>
+-  .onboarding { display: grid; justify-items: start; gap: .6rem; max-width: 34rem; padding: 2rem; } .onboarding span { display: grid; width: 2.4rem; height: 2.4rem; place-items: center; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 1.5rem; } h2, p { margin: 0; } h2 { font-family: var(--font-serif); } p { color: var(--text-muted); line-height: 1.5; } button { margin-top: .4rem; border: 0; border-radius: var(--radius); padding: .55rem .75rem; background: var(--accent); color: white; font: inherit; font-weight: 700; cursor: pointer; }
++  .onboarding { display: grid; justify-items: start; gap: .6rem; max-width: 34rem; padding: 2rem; } .onboarding span { display: grid; width: 2.4rem; height: 2.4rem; place-items: center; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 1.5rem; } h2, p { margin: 0; } h2 { font-family: var(--font-serif); } p { color: var(--text-muted); line-height: 1.5; } button { margin-top: .4rem; border: 0; border-radius: var(--radius); padding: .55rem .75rem; background: var(--accent); color: var(--text-on-accent); font: inherit; font-weight: 700; cursor: pointer; }
+ </style>
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/board/TicketCard.svelte work/app/src/lib/components/board/TicketCard.svelte
+--- upstream/app/src/lib/components/board/TicketCard.svelte	2026-10-20 10:03:50.847427119 +0200
++++ work/app/src/lib/components/board/TicketCard.svelte	2026-10-20 12:00:32.630618286 +0200
+@@ -50,5 +50,5 @@
+ </article>
+ 
+ <style>
+-  .card { position: relative; display: grid; gap: .45rem; overflow: hidden; padding: .8rem .85rem .85rem 1.3rem; border: 1px solid var(--card-border); border-radius: 4px; background: var(--surface-card); box-shadow: 0 1px 2px rgb(24 28 34 / .06); cursor: grab; transition: border-color var(--motion-fast), background var(--motion-fast), box-shadow var(--motion-fast); } .card:hover { border-color: var(--border-strong); background: var(--surface-card); box-shadow: 0 2px 4px rgb(24 28 34 / .09); } .card:active { cursor: grabbing; } .questline { position:absolute; inset:.75rem auto .75rem .6rem; width:3px; background:var(--questline); } .waypoint, .claim-node { position:absolute; inline-size:.45rem; block-size:.45rem; background:var(--surface-card); border:2px solid var(--questline); transform:rotate(45deg); } .waypoint { inset:.2rem auto auto 50%; translate:-50% 0; } .claim-node { inset:auto auto 1.15rem 50%; translate:-50% 0; border-radius:50%; transform:none; } .card-main { display: grid; gap: .45rem; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer; } .topline, .footer { display: flex; align-items: center; flex-wrap: wrap; gap: .35rem; } code { color: var(--text-muted); font: .69rem var(--font-mono); } .project, .priority, .story, .chip, .meta { padding: .2rem .55rem; border: 0; border-radius: 999px; color: var(--text-muted); font-size: .73rem; line-height: 1.25; } .project, .chip.label, .chip.claim.stale, .meta { background: var(--surface-muted); } .priority { margin-left: auto; background: var(--surface-muted); text-transform: uppercase; font-family: var(--font-mono); } .priority.urgent { color: var(--text); background: color-mix(in oklch, var(--danger), var(--bg) 84%); } .priority.high { color: var(--text); background: color-mix(in oklch, var(--warning), var(--bg) 84%); } .story { color: var(--text); background: color-mix(in oklch, var(--story), var(--bg) 86%); } .category { color: var(--accent); font-size: .72rem; } strong { font-size: .9rem; line-height: 1.28; } .description { display: -webkit-box; overflow: hidden; color: var(--text-muted); font-size: .76rem; line-height: 1.4; line-clamp: 2; -webkit-box-orient: vertical; -webkit-line-clamp: 2; } .thumbs { display: flex; gap: .35rem; } .thumbs button, .thumbs > span { display: grid; width: 2.75rem; height: 2.75rem; place-items: center; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-muted); color: var(--text-muted); cursor: pointer; font-size: .7rem; } .thumbnail { position: relative; isolation: isolate; } .thumbnail::before { content: ''; position: absolute; z-index: 2; inset: .18rem; border: 1px solid color-mix(in srgb, var(--border), transparent 20%); border-radius: var(--radius); pointer-events: none; } img { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: cover; transition: opacity var(--motion-fast); } img:global(.unavailable) { opacity: 0; } .thumbnail-label { position: absolute; z-index: 0; inset: 0; display: grid; place-items: center; color: color-mix(in srgb, var(--text-muted), transparent 15%); font: 1rem/1 var(--font-mono); } .footer { min-height: 1rem; } .chip.reply, .chip.reminder { color: var(--text); background: color-mix(in oklch, var(--warning), var(--bg) 84%); } .chip.blocked { color: var(--text); background: color-mix(in oklch, var(--danger), var(--bg) 84%); } .chip.claim { color: var(--accent); background: var(--accent-soft); } .chip.route { font-family: var(--font-mono); } .meta, time { color: var(--text-muted); font: .72rem var(--font-mono); } time { margin-left: auto; }
++  .card { position: relative; display: grid; gap: .45rem; overflow: hidden; padding: .8rem .85rem .85rem 1.3rem; border: var(--border-width) solid var(--card-border); border-radius: var(--radius); background: var(--surface-card); box-shadow: var(--shadow); cursor: grab; transition: border-color var(--motion-fast), background var(--motion-fast), box-shadow var(--motion-fast); } .card:hover { border-color: var(--hover-border); background: var(--surface-card); box-shadow: var(--glow); } .card:active { cursor: grabbing; } .questline { position:absolute; inset:.75rem auto .75rem .6rem; width:3px; background:var(--questline); } .waypoint, .claim-node { position:absolute; inline-size:.45rem; block-size:.45rem; background:var(--surface-card); border:2px solid var(--questline); transform:rotate(45deg); } .waypoint { inset:.2rem auto auto 50%; translate:-50% 0; } .claim-node { inset:auto auto 1.15rem 50%; translate:-50% 0; border-radius:50%; transform:none; } .card-main { display: grid; gap: .45rem; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer; } .topline, .footer { display: flex; align-items: center; flex-wrap: wrap; gap: .35rem; } code { color: var(--accent); font: 700 .7rem var(--font-mono); letter-spacing: .04em; } .project, .priority, .story, .chip, .meta { padding: .14rem .45rem; border: 1px solid var(--border); border-radius: var(--radius); color: var(--text-muted); font-size: .7rem; line-height: 1.25; } .project, .chip.label, .chip.claim.stale, .meta { background: var(--surface-muted); } .priority { margin-left: auto; background: var(--surface-muted); text-transform: uppercase; font-family: var(--font-mono); } .priority.urgent { border-color: var(--danger); color: var(--danger); background: color-mix(in oklch, var(--danger), var(--bg) 86%); } .priority.high { border-color: var(--warning); color: var(--warning); background: color-mix(in oklch, var(--warning), var(--bg) 88%); } .story { color: var(--text); background: color-mix(in oklch, var(--story), var(--bg) 86%); } .category { color: var(--cyan); font-size: .72rem; } strong { font-size: .9rem; line-height: 1.28; } .description { display: -webkit-box; overflow: hidden; color: var(--text-muted); font-size: .76rem; line-height: 1.4; line-clamp: 2; -webkit-box-orient: vertical; -webkit-line-clamp: 2; } .thumbs { display: flex; gap: .35rem; } .thumbs button, .thumbs > span { display: grid; width: 2.75rem; height: 2.75rem; place-items: center; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-muted); color: var(--text-muted); cursor: pointer; font-size: .7rem; } .thumbnail { position: relative; isolation: isolate; } .thumbnail::before { content: ''; position: absolute; z-index: 2; inset: .18rem; border: 1px solid color-mix(in srgb, var(--border), transparent 20%); border-radius: var(--radius); pointer-events: none; } img { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: cover; transition: opacity var(--motion-fast); } img:global(.unavailable) { opacity: 0; } .thumbnail-label { position: absolute; z-index: 0; inset: 0; display: grid; place-items: center; color: color-mix(in srgb, var(--text-muted), transparent 15%); font: 1rem/1 var(--font-mono); } .footer { min-height: 1rem; } .chip.reply, .chip.reminder { color: var(--text); background: color-mix(in oklch, var(--warning), var(--bg) 84%); } .chip.blocked { color: var(--text); background: color-mix(in oklch, var(--danger), var(--bg) 84%); } .chip.claim { border-color: var(--agent); color: var(--agent); background: var(--accent-soft); } .chip.assignee { border-color: var(--cyan); color: var(--cyan); } .chip.route { font-family: var(--font-mono); } .meta, time { color: var(--text-muted); font: .72rem var(--font-mono); } time { margin-left: auto; }
+ </style>
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/notifications/NotificationInbox.svelte work/app/src/lib/components/notifications/NotificationInbox.svelte
+--- upstream/app/src/lib/components/notifications/NotificationInbox.svelte	2026-10-20 10:03:50.857427169 +0200
++++ work/app/src/lib/components/notifications/NotificationInbox.svelte	2026-10-20 13:08:15.471963169 +0200
+@@ -2,6 +2,7 @@
+   import { onMount } from 'svelte';
+   import type { Notification } from '../../types';
+   import type { BoardState } from '../../state/board.svelte';
++  import { drawClawd } from '../shell/clawd';
+ 
+   let { state }: { state: BoardState } = $props();
+ 
+@@ -64,20 +65,11 @@
+ 
+   function createNotificationIcon() {
+     const canvas = document.createElement('canvas');
+-    canvas.width = 64;
+-    canvas.height = 64;
++    canvas.width = 128;
++    canvas.height = 128;
+     const context = canvas.getContext('2d');
+     if (!context) return '';
+-    const styles = getComputedStyle(document.documentElement);
+-    context.fillStyle = styles.getPropertyValue('--accent').trim();
+-    context.beginPath();
+-    context.arc(32, 32, 28, 0, Math.PI * 2);
+-    context.fill();
+-    context.fillStyle = styles.getPropertyValue('--text-on-accent').trim();
+-    context.font = 'bold 36px system-ui';
+-    context.textAlign = 'center';
+-    context.textBaseline = 'middle';
+-    context.fillText('S', 32, 34);
++    drawClawd(context, canvas.width);
+     return canvas.toDataURL();
+   }
+ 
+@@ -163,7 +155,8 @@
+ 
+ <style>
+   .bell, .quiet, .tabs button, .notification { border: 0; font: inherit; }
+-  .bell { box-sizing: border-box; height: var(--control-height); min-height: var(--control-height); border: 1px solid var(--border); background: var(--surface); color: var(--text); padding: .5rem .65rem; border-radius: var(--radius); display: inline-flex; align-items: center; gap: .4rem; }
++  .bell { box-sizing: border-box; height: var(--control-height); min-height: var(--control-height); border: 1px solid var(--border); background: var(--surface); color: var(--text); padding: .5rem .65rem; border-radius: var(--radius); display: inline-flex; align-items: center; gap: .4rem; font-size: .76rem; }
++  .bell:hover { border-color: var(--accent); color: var(--accent); }
+   .badge { min-width: 1.35rem; padding: .08rem .3rem; border-radius: var(--radius); background: var(--accent); color: var(--text-on-accent); font-size: .72rem; font-weight: 700; }
+   .inbox { position: absolute; z-index: 20; right: 1rem; top: 4.25rem; width: min(25rem, calc(100vw - 2rem)); padding: 1rem; background: var(--bg-deep); border-color: var(--border-strong); }
+   header { display: flex; justify-content: space-between; gap: .75rem; align-items: start; }
+@@ -174,8 +167,8 @@
+   .quiet:disabled { color: var(--text-muted); }
+   .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: .25rem; margin: 1rem 0 .6rem; background: var(--surface-muted); padding: .25rem; border-radius: var(--radius); }
+   .tabs button { background: transparent; border: 1px solid transparent; color: var(--text-muted); padding: .4rem .25rem; border-radius: var(--radius); font-size: .78rem; }
+-  .tabs button.active { background: var(--surface); color: var(--text); border: 1px solid var(--border-strong); }
+-  .tabs span { margin-left: .28rem; color: var(--accent); font-weight: 700; }
++  .tabs button.active { background: var(--accent); color: var(--text-on-accent); border: 1px solid var(--accent); font-weight: 700; }
++  .tabs span { margin-left: .28rem; color: inherit; font-weight: 700; }
+   .notification-list { max-height: min(60vh, 34rem); overflow: auto; }
+   .notification { width: 100%; display: grid; grid-template-columns: .7rem 1fr auto; gap: .55rem; align-items: start; padding: .72rem .2rem; color: var(--text); text-align: left; background: transparent; border-top: 1px solid var(--border); }
+   .notification:first-child { border-top: 0; }
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/sessions/MarkdownFileDialog.svelte work/app/src/lib/components/sessions/MarkdownFileDialog.svelte
+--- upstream/app/src/lib/components/sessions/MarkdownFileDialog.svelte	1970-01-01 01:00:00.000000000 +0100
++++ work/app/src/lib/components/sessions/MarkdownFileDialog.svelte	2026-10-20 11:39:00.765043624 +0200
+@@ -0,0 +1,63 @@
++<script lang="ts">
++  import Dialog from '../ui/Dialog.svelte';
++  import { codeCopy, renderMarkdown } from '../ticket/markdown';
++  import { loadMarkdown, type MarkdownFile } from '../../sessions/model';
++
++  let { file, onclose }: { file: MarkdownFile | null; onclose: () => void } = $props();
++  let text = $state<string | null>(null);
++  let error = $state('');
++  let raw = $state(false);
++  let copied = $state(false);
++
++  $effect(() => {
++    const wanted = file;
++    text = null;
++    error = '';
++    raw = false;
++    if (!wanted?.href) return;
++    let stale = false;
++    loadMarkdown(wanted.href).then((t) => { if (!stale) text = t; }, (cause) => { if (!stale) error = cause instanceof Error ? cause.message : String(cause); });
++    return () => { stale = true; };
++  });
++
++  async function copyPath() {
++    if (!file) return;
++    try { await navigator.clipboard.writeText(file.path); copied = true; setTimeout(() => (copied = false), 1400); } catch { /* the path stays selectable */ }
++  }
++</script>
++
++<Dialog open={file !== null} label={file?.name ?? 'Markdown file'} wide onclose={onclose}>
++  <div class="frame">
++    <header>
++      <div>
++        <p class="eyebrow">Markdown file · request #{file?.request}</p>
++        <h2>{file?.name}</h2>
++        <button class="path" onclick={copyPath} title="Copy the path">{copied ? 'copied' : file?.path}</button>
++      </div>
++      <div class="actions">
++        <button onclick={() => (raw = !raw)}>{raw ? 'Rendered' : 'Source'}</button>
++        <button onclick={onclose} aria-label="Close">✕</button>
++      </div>
++    </header>
++    <div class="content">
++      {#if error}<p class="muted">Could not open it: {error}</p>
++      {:else if text === null}<p class="muted">Loading…</p>
++      {:else if raw}<pre>{text}</pre>
++      {:else}<div class="markdown" use:codeCopy>{@html renderMarkdown(text)}</div>{/if}
++    </div>
++  </div>
++</Dialog>
++
++<style>
++  .frame { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
++  header { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
++  h2 { margin: .1rem 0 .25rem; font-family: var(--font-serif); font-size: 1.25rem; }
++  .eyebrow { margin: 0; color: var(--text-muted); font-size: .68rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
++  .path { padding: 0; border: 0; background: none; color: var(--text-muted); font: .72rem var(--font-mono); cursor: pointer; text-align: left; overflow-wrap: anywhere; }
++  .actions { display: flex; gap: .4rem; align-items: start; }
++  .actions button { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: inherit; padding: .35rem .6rem; font: inherit; font-size: .78rem; cursor: pointer; }
++  .actions button:hover { border-color: var(--accent); color: var(--accent); }
++  .content { overflow-y: auto; padding: 1.2rem 1.5rem 2rem; }
++  pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: .78rem/1.5 var(--font-mono); }
++  .muted { color: var(--text-muted); }
++</style>
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/sessions/RequestDetail.svelte work/app/src/lib/components/sessions/RequestDetail.svelte
+--- upstream/app/src/lib/components/sessions/RequestDetail.svelte	1970-01-01 01:00:00.000000000 +0100
++++ work/app/src/lib/components/sessions/RequestDetail.svelte	2026-10-20 13:14:01.765842471 +0200
+@@ -0,0 +1,173 @@
++<script lang="ts">
++  import { codeCopy, renderMarkdown } from '../ticket/markdown';
++  import { currentMilestone, duration, forYou, MILESTONE_MARK, MILESTONE_WORD, standing, STATUS_MARK, stepsOf, totals, workedMs, type MarkdownFile, type Session, type SessionRequest } from '../../sessions/model';
++
++  let { request: r, session, markdown, onfile, onrequest }: {
++    request: SessionRequest;
++    session: Session;
++    markdown: Map<string, MarkdownFile>;
++    onfile: (file: MarkdownFile) => void;
++    onrequest: (id: string) => void;
++  } = $props();
++
++  const steps = $derived(stepsOf(r, session.requests));
++  const at = $derived(currentMilestone(steps.steps));
++  const done = $derived(steps.steps.filter((s) => s.status === 'completed').length);
++  const you = $derived(forYou(r, session.requests));
++  const lines = $derived(totals(r));
++  const host = $derived(r.foldedInto ? session.requests.find((x) => x.id === r.foldedInto) : undefined);
++  const where = (path: string) => (session.cwd && path.startsWith(session.cwd.replace(/\/+$/, '') + '/') ? path.slice(session.cwd.replace(/\/+$/, '').length + 1) : path);
++  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
++</script>
++
++<article class="request">
++  <header>
++    <p class="eyebrow">Request #{r.n}</p>
++    <p class="prompt">{r.text || '(empty prompt)'}</p>
++    {#if host}<p class="muted">Sent while <button class="link" onclick={() => onrequest(host.id)}>#{host.n}</button> ran; that turn answered both.</p>{/if}
++  </header>
++
++  <dl class="facts">
++    <dt>Status</dt>
++    <dd><span class={`status ${r.status}`}>{STATUS_MARK[r.status]} {standing(r, session.requests)}</span></dd>
++    <dt>Objective</dt>
++    <dd class:muted={!(r.objective ?? host?.objective)}>{r.objective ?? host?.objective ?? (r.text.split('\n').find((l) => l.trim()) ?? '')}</dd>
++    {#if at >= 0}
++      <dt>Now</dt>
++      <dd><b class="now">{steps.steps[at].title}</b>{#if steps.steps[at].doing}{` — ${steps.steps[at].doing}`}{/if}</dd>
++    {/if}
++    <dt>Milestones</dt>
++    <dd>{#if steps.steps.length}{done} of {steps.steps.length} done{#if steps.from} <span class="muted">(from <button class="link" onclick={() => onrequest(steps.from!.id)}>#{steps.from.n}</button>{steps.fromTasks ? `'s task list` : ''})</span>{:else if steps.fromTasks} <span class="muted">(from the task list)</span>{/if}{:else}<span class="muted">none reported</span>{/if}</dd>
++  </dl>
++
++  {#if steps.steps.length}
++    <section>
++      <h3>Milestones</h3>
++      <ol class="milestones">
++        {#each steps.steps as s, i (i)}
++          <li class={s.status} class:current={i === at}>
++            <span class="mark" title={MILESTONE_WORD[s.status]}>{MILESTONE_MARK[s.status]}</span>
++            <div>
++              <span class="title">{s.title}</span>
++              {#if (s.status === 'blocked' || s.status === 'waiting') && s.blocker}<small class="note">{s.status}: {s.blocker}</small>
++              {:else if i === at && s.doing}<small class="note">{s.doing}</small>
++              {:else if s.status === 'completed' && s.evidence}<small class="note">{s.evidence}</small>{/if}
++            </div>
++          </li>
++        {/each}
++      </ol>
++    </section>
++  {/if}
++
++  <section>
++    <h3>What was done</h3>
++    <p class="chips">
++      {#if r.files.length}<span class="chip edit">✎ {plural(r.files.length, 'file')} <b class="add">+{lines.add}</b> <b class="del">−{lines.del}</b></span>{/if}
++      {#if r.commandCount}<span class="chip">$ {plural(r.commandCount, 'command')}</span>{/if}
++      {#if r.commits}<span class="chip">{plural(r.commits, 'commit')}</span>{/if}
++      {#if r.test}<span class={`chip ${r.test.passed ? 'pass' : 'fail'}`}>{r.test.passed ? '✓ tests pass' : '✗ tests fail'}</span>{/if}
++      {#if r.agents.length}<span class="chip">◆ {plural(r.agents.length, 'agent')}</span>{/if}
++      <span class="chip muted">{plural(r.tools, 'tool call')}</span>
++    </p>
++    {#if !r.turns.length}
++      <p class="muted">{r.status === 'in_progress' ? 'Working on it…' : r.status === 'pending' ? 'Waiting for its turn.' : 'Nothing was said.'}</p>
++    {/if}
++    {#each r.turns as turn, i (i)}
++      {#if r.turns.length > 1}<p class="turn">Turn {i + 1} · {duration(turn.durationMs)}{turn.reason !== 'answer' ? ` · ${turn.reason === 'aborted' ? 'interrupted' : 'stopped'}` : ''}</p>{/if}
++      {#if turn.answer}
++        <div class="markdown answer" use:codeCopy>{@html renderMarkdown(turn.answer)}</div>
++      {:else}
++        <p class="muted">{turn.reason === 'aborted' ? 'Interrupted before an answer.' : turn.reason === 'answer' ? 'Claude said nothing more.' : 'Stopped before an answer.'}</p>
++      {/if}
++    {/each}
++    {#if r.status === 'in_progress' && r.turns.length}<p class="muted">Working on it again…</p>{/if}
++  </section>
++
++  <section class="for-you">
++    <h3>For you</h3>
++    {#if you.empty}<p class="muted">{r.status === 'in_progress' ? 'Nothing asked of you so far.' : 'Nothing was asked of you.'}</p>{/if}
++    {#if you.asked.length}
++      <h4>Asked during the work</h4>
++      <ul>{#each you.asked as q, i (i)}<li><span class="q">?</span> {q.question}<small class={q.answer === undefined ? 'open' : ''}>{q.answer !== undefined ? `you answered: ${q.answer}` : 'not answered'}</small></li>{/each}</ul>
++    {/if}
++    {#if you.questions.length}
++      <h4>Questions</h4>
++      <ul>{#each you.questions as q, i (i)}<li><span class="q">?</span> {q}</li>{/each}</ul>
++    {/if}
++    {#if you.actions.length}
++      <h4>Action items</h4>
++      <ul class="actions">{#each you.actions as a, i (i)}<li><span class="box">□</span> {a}</li>{/each}</ul>
++    {/if}
++  </section>
++
++  {#if r.files.length}
++    <section>
++      <h3>Files · {r.files.length}</h3>
++      <ul class="files">
++        {#each r.files as f (f.path)}
++          {@const md = markdown.get(f.path)}
++          <li>
++            {#if md}<button class="link" onclick={() => onfile(md)} title="Open">{where(f.path)}</button>{:else}<span title={f.path}>{where(f.path)}</span>{/if}
++            {#if f.how === 'new'}<small class="new">new</small>{/if}
++            <span class="lines"><b class="add">+{f.add}</b> <b class="del">−{f.del}</b></span>
++          </li>
++        {/each}
++      </ul>
++    </section>
++  {/if}
++
++
++  {#if r.agents.length}
++    <section>
++      <h3>Agents · {r.agents.length}</h3>
++      <ul>{#each r.agents as a, i (i)}<li><b class="agent">◆ {a.name}</b> {a.task}</li>{/each}</ul>
++    </section>
++  {/if}
++
++  {#if !steps.fromTasks && r.tasks.length}
++    <section>
++      <h3>Tasks · {r.tasks.filter((t) => t.status === 'completed').length}/{r.tasks.length}</h3>
++      <ul>{#each r.tasks as t (t.id)}<li class={t.status}><span class="mark">{t.status === 'completed' ? '✓' : t.status === 'in_progress' ? '◉' : '○'}</span> {t.title}</li>{/each}</ul>
++    </section>
++  {/if}
++
++  <p class="muted foot">{duration(workedMs(r))} worked{#if r.startedAt} · started {new Date(r.startedAt).toLocaleString()}{/if}{#if r.endedAt} · ended {new Date(r.endedAt).toLocaleString()}{/if}</p>
++</article>
++
++<style>
++  .request { display: grid; gap: 1.1rem; }
++  header { display: grid; gap: .35rem; }
++  .eyebrow { margin: 0; color: var(--text-muted); font-size: .68rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
++  .prompt { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: 700; font-size: .95rem; line-height: 1.45; max-height: 14rem; overflow-y: auto; }
++  .muted { color: var(--text-muted); }
++  p { margin: 0; }
++  .facts { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: .35rem .8rem; margin: 0; padding: .8rem 1rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font-size: .84rem; }
++  dt { color: var(--text-muted); font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding-top: .1rem; } dd { margin: 0; overflow-wrap: anywhere; }
++  .status { font-weight: 700; } .status.completed { color: var(--success, var(--status-done)); } .status.in_progress { color: var(--accent); } .status.failed { color: var(--danger); } .status.interrupted, .status.pending { color: var(--text-muted); }
++  .now { color: var(--accent); }
++  section { display: grid; gap: .55rem; }
++  h3 { margin: 0; color: var(--accent); font-size: .78rem; letter-spacing: .1em; text-transform: uppercase; }
++  h4 { margin: .3rem 0 0; font-size: .8rem; }
++  ul, ol { display: grid; gap: .3rem; margin: 0; padding: 0; list-style: none; font-size: .84rem; }
++  .milestones li { display: grid; grid-template-columns: 1.4rem minmax(0, 1fr); gap: .3rem; padding: .3rem .4rem; border-radius: var(--radius); }
++  .milestones li.current { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
++  .milestones .mark { font-family: var(--font-mono); text-align: center; color: var(--text-muted); }
++  .milestones .completed .mark { color: var(--success, var(--status-done)); } .milestones .completed .title, .milestones .skipped .title { color: var(--text-muted); }
++  .milestones .in_progress .mark, .milestones .verifying .mark, .milestones .current .title { color: var(--accent); }
++  .milestones .blocked .mark, .milestones .failed .mark { color: var(--danger); }
++  .milestones .current .title { font-weight: 700; }
++  .note { display: block; color: var(--text-muted); font-size: .76rem; } .blocked .note { color: var(--danger); }
++  .chips { display: flex; flex-wrap: wrap; gap: .4rem; }
++  .chip { padding: .2rem .55rem; border: 1px solid var(--border); border-radius: 999px; font: .74rem var(--font-mono); }
++  .chip.pass { color: var(--success, var(--status-done)); } .chip.fail { color: var(--danger); }
++  .add { color: var(--success, var(--status-done)); font-weight: 400; } .del { color: var(--danger); font-weight: 400; }
++  .turn { color: var(--text-muted); font: .72rem var(--font-mono); margin-top: .4rem; }
++  .answer { padding: .8rem 1rem; border-left: 3px solid var(--accent); background: var(--surface); border-radius: var(--radius); }
++  .for-you ul li { padding: .1rem 0; } .q { color: var(--accent); font-weight: 700; } .box { color: var(--warning, var(--accent)); }
++  .for-you small { display: block; margin-left: 1.1rem; color: var(--text-muted); font-size: .76rem; } .for-you small.open { color: var(--warning, var(--accent)); }
++  .files li { display: flex; align-items: baseline; gap: .5rem; font: .78rem var(--font-mono); overflow-wrap: anywhere; } .files .lines { margin-left: auto; white-space: nowrap; }
++  .new { flex: none; padding: 0 .35rem; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: .66rem; white-space: nowrap; }
++  .agent { color: var(--agent, var(--accent)); }
++  .link { padding: 0; border: 0; background: none; color: var(--cyan, var(--accent)); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; text-align: left; }
++  .foot { font-size: .72rem; }
++</style>
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/sessions/SessionDialog.svelte work/app/src/lib/components/sessions/SessionDialog.svelte
+--- upstream/app/src/lib/components/sessions/SessionDialog.svelte	1970-01-01 01:00:00.000000000 +0100
++++ work/app/src/lib/components/sessions/SessionDialog.svelte	2026-10-20 12:08:50.900800674 +0200
+@@ -0,0 +1,121 @@
++<script lang="ts">
++  import Dialog from '../ui/Dialog.svelte';
++  import RequestDetail from './RequestDetail.svelte';
++  import MarkdownFileDialog from './MarkdownFileDialog.svelte';
++  import { loadSession, markdownByPath, projectLabel, relativeTime, requestTitle, STATUS_MARK, stepsOf, duration, workedMs, type MarkdownFile, type Session } from '../../sessions/model';
++
++  let { id, onclose }: { id: string | null; onclose: () => void } = $props();
++  let session = $state<Session | null>(null);
++  let error = $state('');
++  let selected = $state<string | null>(null);
++  let file = $state<MarkdownFile | null>(null);
++
++  const ordered = $derived(session ? [...session.requests].reverse() : []);
++  const current = $derived(session?.requests.find((r) => r.id === selected) ?? ordered[0] ?? null);
++  const markdown = $derived(session ? markdownByPath(session) : new Map<string, MarkdownFile>());
++
++  $effect(() => {
++    const wanted = id;
++    session = null;
++    error = '';
++    selected = null;
++    if (!wanted) return;
++    let stale = false;
++    loadSession(wanted).then((s) => { if (!stale) session = s; }, (cause) => { if (!stale) error = cause instanceof Error ? cause.message : String(cause); });
++    return () => { stale = true; };
++  });
++
++  const progress = (r: Session['requests'][number]) => {
++    const { steps } = stepsOf(r, session?.requests ?? []);
++    return steps.length ? `${steps.filter((s) => s.status === 'completed').length}/${steps.length}` : '';
++  };
++</script>
++
++<Dialog open={id !== null} label="Session" wide class="session-dialog" onclose={onclose}>
++  <div class="frame">
++    <header>
++      <div class="title">
++        <p class="eyebrow">Session{#if session?.live} · <span class="live">at work now</span>{/if}</p>
++        <h2>{session?.name ?? 'Loading…'}</h2>
++        {#if session}
++          <p class="meta">
++            <code>{session.id}</code>
++            <span title={session.cwd}>{projectLabel(session)}</span>
++            {#if session.branch}<span>⎇ {session.branch}</span>{/if}
++            <span title={new Date(session.startedAt).toLocaleString()}>started {relativeTime(session.startedAt)}</span>
++            <span title={new Date(session.updatedAt).toLocaleString()}>last active {relativeTime(session.updatedAt)}</span>
++            {#if session.costUsd !== undefined}<span>${session.costUsd.toFixed(2)}</span>{/if}
++            <span title={session.from === 'glowup' ? 'recorded by glowup as the work happened' : 'read from the transcript'}>{session.requests.length} request{session.requests.length === 1 ? '' : 's'} · {session.from}</span>
++          </p>
++        {/if}
++      </div>
++      <button class="close" onclick={onclose} aria-label="Close">✕</button>
++    </header>
++
++    {#if error}
++      <p class="error">Could not read this session: {error}</p>
++    {:else if session && !session.requests.length}
++      <p class="error">Nothing was asked in this session.</p>
++    {:else if session}
++      <div class="body">
++        <nav class="list" aria-label="Requests">
++          {#each ordered as r (r.id)}
++            <button class:active={current?.id === r.id} class={`req ${r.status}`} onclick={() => (selected = r.id)}>
++              <span class="mark">{STATUS_MARK[r.status]}</span>
++              <span class="text"><b>#{r.n}</b> {requestTitle(r) || '(empty prompt)'}</span>
++              <small>{progress(r) ? `${progress(r)} · ` : ''}{duration(workedMs(r))}</small>
++            </button>
++          {/each}
++          {#if session.markdown.length}
++            <div class="files">
++              <p class="eyebrow">Markdown created</p>
++              {#each session.markdown as m (m.path)}
++                {#if m.href}
++                  <button class="file" onclick={() => (file = m)} title={m.path}>▤ {m.name}<small>#{m.request}</small></button>
++                {:else}
++                  <span class="file gone" title={`${m.path} (no longer there)`}>{m.name}<small>gone</small></span>
++                {/if}
++              {/each}
++            </div>
++          {/if}
++        </nav>
++        <div class="detail">
++          {#if current}
++            <RequestDetail request={current} {session} {markdown} onfile={(m) => (file = m)} onrequest={(rid) => (selected = rid)} />
++          {/if}
++        </div>
++      </div>
++    {:else}
++      <p class="error">Loading…</p>
++    {/if}
++  </div>
++</Dialog>
++
++<MarkdownFileDialog {file} onclose={() => (file = null)} />
++
++<style>
++  :global(dialog.session-dialog) { inline-size: min(96rem, calc(100vw - 2 * var(--dialog-gutter))); block-size: min(66rem, calc(100dvh - 2 * var(--dialog-gutter))); }
++  .frame { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
++  header { display: flex; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
++  h2 { margin: .1rem 0 .3rem; font-family: var(--font-serif); font-size: 1.35rem; }
++  .eyebrow { margin: 0; color: var(--text-muted); font-size: .68rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
++  .live { color: var(--status-doing); }
++  .meta { display: flex; flex-wrap: wrap; gap: .4rem .9rem; margin: 0; color: var(--text-muted); font-size: .75rem; }
++  code { font-family: var(--font-mono); font-size: .72rem; color: var(--accent); }
++  .close { align-self: start; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: inherit; padding: .3rem .55rem; cursor: pointer; }
++  .close:hover { border-color: var(--accent); color: var(--accent); }
++  .error { padding: 2rem 1.25rem; color: var(--text-muted); }
++  .body { display: grid; grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr); min-height: 0; }
++  .list { display: flex; flex-direction: column; gap: .2rem; padding: .75rem; overflow-y: auto; border-right: 1px solid var(--border); background: var(--bg-deep); }
++  .req { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: .45rem; padding: .5rem .55rem; border: 0; border-radius: var(--radius); background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer; }
++  .req:hover { background: var(--surface-muted); } .req.active { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
++  .req .mark { grid-row: span 2; font-family: var(--font-mono); color: var(--text-muted); }
++  .req.completed .mark { color: var(--success, var(--status-done)); } .req.in_progress .mark { color: var(--accent); } .req.failed .mark { color: var(--danger); }
++  .req .text { overflow: hidden; font-size: .8rem; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; }
++  .req small { color: var(--text-muted); font: .68rem var(--font-mono); }
++  .files { display: grid; gap: .2rem; margin-top: .9rem; padding-top: .7rem; border-top: 1px solid var(--border); }
++  .file { display: flex; justify-content: space-between; gap: .5rem; padding: .35rem .5rem; border: 0; border-radius: var(--radius); background: transparent; color: var(--cyan, var(--accent)); text-align: left; font: .78rem var(--font-mono); cursor: pointer; overflow: hidden; }
++  .file:hover { background: var(--surface-muted); } .file small { color: var(--text-muted); } .file.gone { color: var(--text-muted); text-decoration: line-through; cursor: default; }
++  .detail { min-width: 0; overflow-y: auto; padding: 1rem 1.4rem 2rem; }
++  @media (max-width: 820px) { .body { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); } .list { max-height: 30vh; border-right: 0; border-bottom: 1px solid var(--border); } }
++</style>
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/sessions/SessionsView.svelte work/app/src/lib/components/sessions/SessionsView.svelte
+--- upstream/app/src/lib/components/sessions/SessionsView.svelte	1970-01-01 01:00:00.000000000 +0100
++++ work/app/src/lib/components/sessions/SessionsView.svelte	2026-10-20 13:24:08.585317264 +0200
+@@ -0,0 +1,95 @@
++<script lang="ts">
++  import { onMount } from 'svelte';
++  import type { BoardState } from '../../state/board.svelte';
++  import { filterSessions, loadIndex, projectLabel, relativeTime, type SessionIndex } from '../../sessions/model';
++  import SessionDialog from './SessionDialog.svelte';
++
++  let { state: board }: { state: BoardState } = $props();
++  let index = $state<SessionIndex | null>(null);
++  let error = $state('');
++  let loading = $state(false);
++  let open = $state<string | null>(null);
++  let copied = $state<string | null>(null);
++  let now = $state(Date.now());
++
++  // The search box is in the page header (Toolbar), which shows only the title and this search in the sessions view.
++  const searching = $derived(board.sessionSearch.trim() !== '');
++  const shown = $derived(index ? filterSessions(index.sessions, board.sessionSearch) : []);
++
++  async function refresh() {
++    loading = true;
++    try {
++      index = await loadIndex();
++      error = '';
++    } catch (cause) {
++      error = cause instanceof Error ? cause.message : String(cause);
++    } finally {
++      loading = false;
++      now = Date.now();
++    }
++  }
++
++  async function copyId(id: string) {
++    try { await navigator.clipboard.writeText(id); copied = id; setTimeout(() => { if (copied === id) copied = null; }, 1400); } catch { /* the id stays selectable */ }
++  }
++
++  onMount(() => {
++    void refresh();
++    // the data is rebuilt after every turn of every session; the list follows it while it is open
++    const timer = setInterval(() => void refresh(), 20_000);
++    return () => clearInterval(timer);
++  });
++</script>
++
++<section class="sessions panel" aria-label="Claude sessions">
++  <p class="note">
++    {#if index}{searching ? `${shown.length} of ` : ''}{index.sessions.length} session{index.sessions.length === 1 ? '' : 's'} · updated {relativeTime(index.generatedAt, now)}{:else if loading}Loading…{/if}
++  </p>
++
++  {#if error}
++    <div class="empty"><span>!</span><h3>No session data</h3><p>The list is built by <code>~/.claude/sidequest-sessions/build.mjs</code> when a session starts and after each turn ({error}). Run <code>node ~/.claude/sidequest-sessions/build.mjs</code> once; this page checks again every 20 seconds.</p></div>
++  {:else if index && !shown.length}
++    <div class="empty"><span>□</span><h3>{searching ? 'Nothing matches' : 'No sessions yet'}</h3><p>{searching ? 'Try fewer words.' : 'Sessions show here once Claude Code has run one.'}</p></div>
++  {:else}
++    <div class="rows" role="list">
++      {#each shown as s (s.id)}
++        <article role="listitem" class:live={s.live}>
++          <button class="open" onclick={() => (open = s.id)} title="Show what was done in this session">
++            <span class="name">{#if s.live}<i class="dot" title="at work now"></i>{/if}{s.name}</span>
++            <span class="prompt">{s.lastPrompt || 'Nothing asked'}</span>
++          </button>
++          <button class="sid" onclick={() => copyId(s.id)} title="Copy the session id">{copied === s.id ? 'copied' : s.id}</button>
++          <span class="project" title={s.cwd}>{projectLabel(s)}{#if s.branch}<small>{s.branch}</small>{/if}</span>
++          <span class="count" title={`${s.done} done of ${s.requests}${s.working ? `, ${s.working} at work` : ''}`}><span><b>{s.done}</b>/{s.requests}</span>{#if s.markdown}<small title="markdown files created">{s.markdown} md</small>{/if}</span>
++          <time datetime={new Date(s.updatedAt).toISOString()} title={new Date(s.updatedAt).toLocaleString()}>{relativeTime(s.updatedAt, now)}</time>
++        </article>
++      {/each}
++    </div>
++  {/if}
++</section>
++
++<SessionDialog id={open} onclose={() => (open = null)} />
++
++<style>
++  .sessions { padding: 1.25rem; }
++  h3, p { margin: 0; }
++  .note { padding-bottom: .8rem; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: .78rem; }
++  button { border: 1px solid var(--border); border-radius: var(--radius); padding: .45rem .65rem; background: var(--surface); color: inherit; font: inherit; font-size: .78rem; cursor: pointer; }
++  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); } button:disabled { opacity: .6; cursor: default; }
++  .rows { display: grid; }
++  article { display: grid; grid-template-columns: minmax(14rem, 1fr) auto minmax(8rem, 14rem) 5.5rem 6rem; align-items: center; gap: .9rem; padding: .7rem 0; border-bottom: 1px solid var(--border); }
++  .open { display: grid; gap: .2rem; padding: .35rem .5rem; border: 0; text-align: left; background: transparent; min-width: 0; }
++  .open:hover { background: var(--surface-muted); color: inherit; }
++  .name { display: flex; align-items: center; gap: .45rem; font-weight: 700; font-size: .9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++  .prompt { color: var(--text-muted); font-size: .76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++  .dot { flex: none; width: .5rem; height: .5rem; border-radius: 999px; background: var(--status-doing); box-shadow: 0 0 .5rem var(--status-doing); }
++  .sid { padding: .2rem .45rem; border: 1px dashed var(--border); background: transparent; color: var(--text-muted); font: .68rem var(--font-mono); }
++  .project { display: grid; color: var(--text-muted); font-size: .76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
++  .project small, .count small { color: var(--text-muted); font: .66rem var(--font-mono); }
++  .count { display: grid; justify-items: end; font: .8rem var(--font-mono); color: var(--text-muted); } .count b { color: var(--success, var(--accent)); }
++  time { color: var(--text-muted); font: .72rem var(--font-mono); text-align: right; }
++  .empty { display: grid; justify-items: center; gap: .45rem; padding: 4rem 1rem; text-align: center; }
++  .empty span { color: var(--accent); font-size: 2rem; } .empty p { max-width: 30rem; color: var(--text-muted); line-height: 1.5; }
++  code { font-family: var(--font-mono); font-size: .8em; }
++  @media (max-width: 900px) { article { grid-template-columns: minmax(0, 1fr) auto auto; } .sid, .project { display: none; } }
++</style>
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/settings/SettingsDialog.svelte work/app/src/lib/components/settings/SettingsDialog.svelte
+--- upstream/app/src/lib/components/settings/SettingsDialog.svelte	2026-10-20 10:03:50.867427220 +0200
++++ work/app/src/lib/components/settings/SettingsDialog.svelte	2026-10-20 12:01:10.210698816 +0200
+@@ -6,6 +6,7 @@
+   import Dialog from '../ui/Dialog.svelte';
+   import Select, { type SelectOption } from '../ui/Select.svelte';
+   import { contextWindowNotes, discoveredModels, modelOptionLabel } from './model-windows';
++  import { applyAppearance, DEFAULT_APPEARANCE, effectiveMode, paletteById, PALETTES, readAppearance, writeAppearance, type Appearance } from '../../state/appearance';
+ 
+   let { state: board }: { state: BoardState } = $props();
+   const tour = getTourState();
+@@ -38,17 +39,18 @@
+   let saving = $state(false);
+   let categoryEditorOpen = $state(false);
+   let routingBulkSaving = $state(false);
+-  let theme = $state<'light' | 'dark'>('light');
++  let appearance = $state.raw<Appearance>(DEFAULT_APPEARANCE);
++  let currentPalette = $derived(paletteById(appearance.palette) ?? PALETTES[0]);
+ 
+-  function setTheme(value: 'light' | 'dark') {
+-    theme = value;
+-    document.documentElement.dataset.theme = value;
+-    localStorage.setItem('sq_theme', value);
++  function setAppearance(change: Partial<Appearance>) {
++    appearance = { ...appearance, ...change };
++    applyAppearance(appearance);
++    writeAppearance(appearance);
+   }
+ 
+   onMount(() => {
+-    const storedTheme = localStorage.getItem('sq_theme');
+-    setTheme(storedTheme === 'dark' ? 'dark' : 'light');
++    appearance = readAppearance();
++    applyAppearance(appearance);
+   });
+ 
+   let selectedProject = $derived(board.currentProject);
+@@ -369,7 +371,21 @@
+         <section class="notifications-section">
+           <p class="eyebrow">Appearance</p>
+           <h3>Theme</h3>
+-          <label class="switch"><input type="checkbox" checked={theme === 'dark'} onchange={(event) => setTheme(checkboxValue(event) ? 'dark' : 'light')} /><span><strong>Dark theme</strong><small>Use the Eigenwise dark palette.</small></span></label>
++          <div class="theme-grid" role="radiogroup" aria-label="Theme">
++            {#each PALETTES as palette (palette.id)}
++              <button class="theme-option" class:active={appearance.palette === palette.id} role="radio" aria-checked={appearance.palette === palette.id} data-palette={palette.id} data-theme={effectiveMode(palette.id, appearance.mode)} onclick={() => setAppearance({ palette: palette.id })}>
++                <span class="theme-swatches" aria-hidden="true"><i class="accent"></i><i class="cyan"></i><i class="agent"></i><i class="success"></i><i class="warning"></i></span>
++                <strong>{palette.name}</strong>
++              </button>
++            {/each}
++          </div>
++          <label class="switch"><input type="checkbox" checked={effectiveMode(appearance.palette, appearance.mode) === 'dark'} disabled={Boolean(currentPalette.fixedMode)} onchange={(event) => setAppearance({ mode: checkboxValue(event) ? 'dark' : 'light' })} /><span><strong>Dark mode</strong><small>{currentPalette.modeNote}</small></span></label>
++          <h3 class="corners-heading">Corners</h3>
++          <div class="scope-tabs corner-tabs" role="radiogroup" aria-label="Corners">
++            <button class:active={appearance.corners === 'soft'} role="radio" aria-checked={appearance.corners === 'soft'} onclick={() => setAppearance({ corners: 'soft' })}>Soft</button>
++            <button class:active={appearance.corners === 'hard'} role="radio" aria-checked={appearance.corners === 'hard'} onclick={() => setAppearance({ corners: 'hard' })}>Hard</button>
++          </div>
++          <p class="hint corner-hint">{appearance.corners === 'soft' ? 'Rounded corners on cards, buttons and dialogs.' : 'Straight, square corners everywhere.'}</p>
+           <div class="tour-control">
+             <p class="eyebrow">Tour</p>
+             <h3>Guided tour</h3>
+@@ -413,7 +429,8 @@
+   button.primary { background: var(--accent); color: var(--text-on-accent); border-color: var(--accent); }
+   button.danger { color: var(--danger); }
+   button:disabled { cursor: not-allowed; opacity: .55; }
+-  .settings-trigger { box-sizing: border-box; height: var(--control-height); min-height: var(--control-height); padding: .5rem .65rem; }
++  .settings-trigger { box-sizing: border-box; height: var(--control-height); min-height: var(--control-height); padding: .5rem .65rem; font-size: .76rem; }
++  .settings-trigger:hover { border-color: var(--accent); color: var(--accent); }
+   .settings-frame { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 1.25rem; min-block-size: 0; max-block-size: inherit; padding: 1.25rem; background: var(--surface-card); color: var(--text); }
+   .settings-body { min-block-size: 0; overflow: auto; padding: 0; background: var(--surface-card); color: var(--text); scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+   .settings-body::-webkit-scrollbar { width: .55rem; }
+@@ -437,16 +454,28 @@
+   .tour-control .hint { margin-bottom: .65rem; }
+   .tour-control small { display: block; margin-top: .45rem; }
+   .scope-tabs { display: flex; gap: .35rem; margin: .8rem 0; }
++  /* Each tile carries its own data-palette, so its colors and font are that theme's: a live preview. */
++  .theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: .45rem; margin: .7rem 0 .2rem; }
++  .theme-option { display: grid; gap: .45rem; justify-items: start; padding: .6rem .65rem; border: var(--border-width) solid var(--border); background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: .78rem; text-align: left; }
++  .theme-option:hover { border-color: var(--accent); }
++  .theme-option.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
++  .theme-option.active strong::after { content: ' ✓'; color: var(--accent); }
++  .theme-swatches { display: flex; gap: .25rem; padding: .3rem; border-radius: var(--radius); background: var(--surface-card); }
++  .theme-swatches i { width: .8rem; height: .8rem; border-radius: 999px; }
++  .theme-swatches .accent { background: var(--accent); } .theme-swatches .cyan { background: var(--cyan); } .theme-swatches .agent { background: var(--agent); } .theme-swatches .success { background: var(--success); } .theme-swatches .warning { background: var(--warning); }
++  .corners-heading { margin-top: 1rem; }
++  .corner-tabs { margin: .5rem 0 .35rem; } .corner-tabs button { min-width: 4.5rem; }
++  .corner-hint { margin: 0 0 .4rem; font-size: .78rem; }
+   .routing-panel, .profile-library { border-top: 1px solid var(--border); margin-top: 1rem; padding-top: 1rem; }
+   .routing-note { color: var(--text-muted); font-size: .82rem; }
+-  .change-badge { display: inline-flex; align-items: center; width: fit-content; border: 0; border-radius: 2px; background: var(--surface-muted); color: var(--text-muted); font-size: .7rem; font-weight: 700; letter-spacing: .04em; padding: .12rem .38rem; text-transform: uppercase; }
+-  .row-badge { display: inline-flex; align-items: center; width: fit-content; margin-inline-start: .5rem; border: 0; border-radius: 2px; background: var(--accent-soft); color: var(--accent); font-size: .7rem; font-weight: 700; letter-spacing: .04em; padding: .12rem .38rem; text-transform: uppercase; }
++  .change-badge { display: inline-flex; align-items: center; width: fit-content; border: 0; border-radius: var(--radius); background: var(--surface-muted); color: var(--text-muted); font-size: .7rem; font-weight: 700; letter-spacing: .04em; padding: .12rem .38rem; text-transform: uppercase; }
++  .row-badge { display: inline-flex; align-items: center; width: fit-content; margin-inline-start: .5rem; border: 0; border-radius: var(--radius); background: var(--accent-soft); color: var(--accent); font-size: .7rem; font-weight: 700; letter-spacing: .04em; padding: .12rem .38rem; text-transform: uppercase; }
+   .preview { display: grid; gap: .35rem; margin-top: .8rem; padding: .7rem; border: 1px solid var(--border-strong); background: var(--surface-muted); font-size: .82rem; }
+   .preview small, .foreign { color: var(--text-muted); }
+   .foreign { color: var(--accent); }
+-  .scope-tabs button.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
++  .scope-tabs button.active { background: var(--accent); border-color: var(--accent); color: var(--text-on-accent); }
+   .category-list { display: grid; gap: .55rem; }
+-  .category-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .35rem 1rem; border: 1px solid var(--border); border-radius: 3px; padding: .6rem .7rem; background: var(--surface-muted); }
++  .category-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .35rem 1rem; border: 1px solid var(--border); border-radius: var(--radius); padding: .6rem .7rem; background: var(--surface-muted); }
+   .category-row.disabled { border-color: var(--border-strong); border-style: dashed; box-shadow: inset .22rem 0 0 var(--border-strong); }
+   .category-row code, .category-row small, .category-meta { display: block; color: var(--text-muted); font-size: .78rem; margin-top: .16rem; }
+   .category-row small { display: -webkit-box; overflow: hidden; line-height: 1.35; line-clamp: 2; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/shell/ProjectRail.svelte work/app/src/lib/components/shell/ProjectRail.svelte
+--- upstream/app/src/lib/components/shell/ProjectRail.svelte	2026-10-20 10:03:50.857427169 +0200
++++ work/app/src/lib/components/shell/ProjectRail.svelte	2026-10-20 13:28:59.733737980 +0200
+@@ -3,6 +3,7 @@
+   import type { BoardState } from '../../state/board.svelte';
+   import type { Project } from '../../types';
+   import { projectFor } from '../board/surface';
++  import { CLAWD_BODY, CLAWD_BODY_COLOR, CLAWD_EYE_COLOR, CLAWD_EYES, CLAWD_HEIGHT, CLAWD_WIDTH, clawdPath } from './clawd';
+ 
+   let { state: board }: { state: BoardState } = $props();
+   let menuProject = $state<Project | null>(null);
+@@ -89,7 +90,8 @@
+ </script>
+ 
+ <aside class="rail" aria-label="Boards" data-tour="project-rail">
+-  <div class="brand"><img class="brand-mark" src="/eigenwise-e.svg" alt="" /><strong>Sidequest</strong><span>work queue</span></div>
++  <div class="brand"><svg class="brand-mark" viewBox="0 0 {CLAWD_WIDTH} {CLAWD_HEIGHT}" shape-rendering="crispEdges" aria-hidden="true"><path fill={CLAWD_BODY_COLOR} d={clawdPath(CLAWD_BODY)} /><path fill={CLAWD_EYE_COLOR} d={clawdPath(CLAWD_EYES)} /></svg><strong>Sidequest</strong><span>work queue</span></div>
++  <button class:active={board.view === 'sessions'} class="archive-button sessions-button" title="Every Claude Code session and what was done in it" onclick={() => board.view === 'sessions' ? board.closeSessions() : board.openSessions()}><span>Claude sessions</span><span class="glyph" aria-hidden="true">▸</span></button>
+   <nav>
+     <button class:active={board.selectedProject === 'all' && board.view === 'board'} onclick={() => board.selectProject('all')}>
+       <span class="project-row"><b>All boards</b><small>{openCount()}</small></span>
+@@ -131,13 +133,13 @@
+ {/if}
+ 
+ <style>
+-  .rail { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; gap: 1rem; min-height: 100vh; padding: 1rem; background: var(--surface); border-right: 1px solid var(--border); }
+-  .brand { display: grid; grid-template-columns: auto 1fr; column-gap: .55rem; padding: .25rem .5rem; color: var(--accent); letter-spacing: -.02em; } .brand-mark { grid-row: span 2; align-self: center; width: 1.45rem; height: 1.6rem; } .brand strong { align-self: end; font-family: var(--font-serif); font-size: 1.3rem; } .brand span, .connection { color: var(--text-muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; }
+-  nav { display: grid; align-content: start; gap: .3rem; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; } nav::-webkit-scrollbar { width: .45rem; } nav::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--border); } button { width: 100%; border: 0; border-radius: var(--radius); padding: .55rem; background: transparent; color: inherit; text-align: left; cursor: pointer; font: inherit; } button:hover { background: var(--surface-muted); } button.active { background: var(--accent-soft); color: var(--accent); }
+-  .project-row { display: flex; align-items: center; gap: .4rem; min-width: 0; } .project-row b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .86rem; } .project-row small { margin-left: auto; color: var(--text-muted); font-family: var(--font-mono); font-size: .7rem; } mark { padding: .2rem .55rem; border-radius: 999px; background: var(--warning); color: var(--text-on-accent); font: 700 .72rem var(--font-mono); } .muted { color: var(--text-muted); font-size: .65rem; }
+-  .project-path { display: block; overflow: hidden; color: var(--text-muted); font-size: .69rem; text-overflow: ellipsis; white-space: nowrap; } .progress { display: flex; height: .2rem; margin-top: .45rem; overflow: hidden; border-radius: 999px; background: var(--border); } .progress i { flex: var(--size, 0); } .todo { background: var(--border-strong); } .doing { background: var(--warning); } .done { background: var(--accent); }
++  .rail { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto auto; gap: 1rem; min-height: 100vh; padding: 1rem; background: var(--bg-deep); border-right: var(--border-width) solid var(--border); }
++  .brand { display: grid; grid-template-columns: auto 1fr; column-gap: .55rem; padding: .25rem .5rem; color: var(--accent); letter-spacing: -.02em; } .brand-mark { grid-row: span 2; align-self: center; width: 2rem; height: 1.25rem; } .brand strong { align-self: end; font-family: var(--font-serif); font-size: 1.2rem; font-weight: 800; letter-spacing: .02em; } .brand span, .connection { color: var(--text-muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; }
++  nav { display: grid; align-content: start; gap: .3rem; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; } nav::-webkit-scrollbar { width: .45rem; } nav::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--border); } button { width: 100%; border: 0; border-radius: var(--radius); padding: .55rem; background: transparent; color: inherit; text-align: left; cursor: pointer; font: inherit; } button:hover { background: var(--surface-muted); } button.active { background: var(--accent-soft); color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
++  .project-row { display: flex; align-items: center; gap: .4rem; min-width: 0; } .project-row b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .86rem; } .project-row small { margin-left: auto; color: var(--text-muted); font-family: var(--font-mono); font-size: .7rem; } mark { padding: .15rem .45rem; border-radius: var(--radius); background: var(--warning); color: var(--text-on-accent); font: 700 .72rem var(--font-mono); } .muted { color: var(--text-muted); font-size: .65rem; }
++  .project-path { display: block; overflow: hidden; color: var(--text-muted); font-size: .69rem; text-overflow: ellipsis; white-space: nowrap; } .progress { display: flex; height: .25rem; margin-top: .45rem; overflow: hidden; border-radius: 0; background: var(--border); } .progress i { flex: var(--size, 0); } .todo { background: var(--status-todo); } .doing { background: var(--status-doing); } .done { background: var(--status-done); }
+   .archived-group { margin-top: .5rem; color: var(--text-muted); font-size: .78rem; } summary { padding: .35rem .55rem; cursor: pointer; } summary span { font-family: var(--font-mono); } .archived { color: var(--text-muted); font-size: .8rem; }
+-  .archive-button { display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--border); } .connection { padding: .2rem .5rem; } .connection.offline { color: var(--danger); }
++  .archive-button { display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--border); } .sessions-button .glyph { color: var(--accent); font-family: var(--font-mono); } .connection { padding: .2rem .5rem; } .connection.offline { color: var(--danger); }
+   .menu-backdrop { position: fixed; inset: 0; z-index: 4; } .project-menu { position: fixed; z-index: 5; display: grid; min-width: 10rem; padding: .25rem; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg-deep); } .project-menu .danger { color: var(--danger); }
+-  @media (max-width: 820px) { .rail { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto; min-height: auto; gap: .6rem; border-right: 0; border-bottom: 1px solid var(--border); } nav { display: flex; align-items: stretch; overflow-x: auto; } nav > button { min-width: 10rem; } .project-path, .connection { display: none; } .progress { margin-top: .3rem; } .archive-button { width: auto; white-space: nowrap; } .archived-group { display: none; } }
++  @media (max-width: 820px) { .rail { grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-rows: auto; min-height: auto; gap: .6rem; border-right: 0; border-bottom: 1px solid var(--border); } nav { display: flex; align-items: stretch; overflow-x: auto; } nav > button { min-width: 10rem; } .project-path, .connection { display: none; } .progress { margin-top: .3rem; } .archive-button { width: auto; white-space: nowrap; } .archived-group { display: none; } .sessions-button { grid-column: 1 / -1; grid-row: 2; } }
+ </style>
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/shell/Toolbar.svelte work/app/src/lib/components/shell/Toolbar.svelte
+--- upstream/app/src/lib/components/shell/Toolbar.svelte	2026-10-20 10:03:50.857427169 +0200
++++ work/app/src/lib/components/shell/Toolbar.svelte	2026-10-20 13:29:58.465054112 +0200
+@@ -45,8 +45,15 @@
+ <svelte:document onclick={closeOutside} />
+ 
+ <header bind:this={toolbar} class="toolbar">
+-  <div class="scope"><h1>{state.currentProject?.name ?? 'All boards'}</h1><p>{subtitle}</p></div>
++  {#if state.view === 'sessions'}
++    <div class="scope"><h1>Claude sessions</h1></div>
++  {:else}
++    <div class="scope"><h1>{state.currentProject?.name ?? 'All boards'}</h1><p>{subtitle}</p></div>
++  {/if}
+   <div class="controls">
++    {#if state.view === 'sessions'}
++    <label class="search session-search"><span>Search sessions</span><input aria-label="Search sessions" bind:value={state.sessionSearch} placeholder="Search name, id, project or prompt" /></label>
++    {:else}
+     <label class="search" data-tour="search"><span>Search tickets</span><input aria-label="Search tickets" bind:value={state.search} placeholder="Search ref, title, labels" /></label>
+     <div class="priority" data-tour="priority-filter" aria-label="Priority filter">
+       {#each ['all', 'urgent', 'high', 'normal', 'low'] as priority (priority)}
+@@ -65,14 +72,19 @@
+       {#if state.popover === 'sort'}<div class="popover" role="menu">{#each sortOptions as [key, label, hint] (key)}<button role="menuitemradio" aria-checked={state.sort === key} onclick={() => setSort(key)}><span>{label}</span><small>{hint}</small></button>{/each}</div>{/if}
+     </div>
+     <button class="new-ticket" data-tour="new-ticket" onclick={() => state.openDialog = 'create'}>New ticket</button>
+-    <NotificationInbox {state} />
+-    <SettingsDialog {state} />
++    {/if}
++    <!-- Hidden, not removed, in the sessions view: the inbox is what sends desktop notifications. -->
++    <div class="app-actions" hidden={state.view === 'sessions'}>
++      <NotificationInbox {state} />
++      <SettingsDialog {state} />
++    </div>
+   </div>
+ </header>
+ 
+ <style>
+-  .toolbar { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 1rem; margin-bottom: 1.5rem; } .scope { display: grid; flex: 0 0 auto; gap: .25rem; } .scope h1, .scope p { margin: 0; white-space: nowrap; } .scope h1 { font-family: var(--font-serif); font-size: clamp(1.35rem, 2vw, 1.85rem); letter-spacing: -.03em; } .scope p { color: var(--text-muted); font-size: .8rem; }
+-  .controls { display: flex; flex: 1 1 42rem; align-items: center; justify-content: end; gap: .1rem; flex-wrap: wrap; min-width: 0; } button, input { font: inherit; } .controls > button, .controls > .menu-wrap > button, .controls .search input, .controls .priority { box-sizing: border-box; height: var(--control-height); min-height: var(--control-height); } button { border: 1px solid var(--border); border-radius: var(--radius); padding: .46rem .45rem; background: var(--surface); color: inherit; cursor: pointer; font-size: .76rem; } button:hover, button.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); } .search span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); } input { min-width: 10rem; padding: .46rem .65rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); }
+-  .priority { display: flex; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); } .priority button { height: 100%; min-height: 0; border: 0; border-radius: 0; padding: 0 .35rem; text-transform: capitalize; } .priority button + button { border-left: 1px solid var(--border); } .menu-wrap { position: relative; } .popover { position: absolute; z-index: 3; top: calc(100% + .35rem); right: 0; display: grid; min-width: 13rem; padding: .25rem; border: 1px solid var(--border-strong); border-radius: var(--radius); background: var(--bg-deep); } .popover button { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border: 0; text-align: left; } .popover small { color: var(--text-muted); } .popover i { width: .55rem; height: .55rem; border-radius: 999px; } .new-ticket { border-color: var(--accent); background: var(--accent); color: var(--text-on-accent); font-weight: 700; } .new-ticket:hover { background: var(--accent-strong); color: var(--text-on-accent); }
+-  @media (max-width: 820px) { .toolbar { gap: .7rem; } .controls { justify-content: start; } .search { flex: 1 0 100%; order: -1; } .search input { width: 100%; } }
++  .toolbar { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 1rem; margin-bottom: 1.5rem; } .scope { display: grid; flex: 0 0 auto; gap: .25rem; } .scope h1, .scope p { margin: 0; white-space: nowrap; } .scope h1 { font-family: var(--font-serif); font-size: clamp(1.25rem, 1.8vw, 1.6rem); font-weight: 800; letter-spacing: .01em; } .scope p { color: var(--text-muted); font-size: .8rem; }
++  .controls { display: flex; flex: 1 1 42rem; align-items: center; justify-content: end; gap: .1rem; flex-wrap: wrap; min-width: 0; } button, input { font: inherit; } .controls > button, .controls > .menu-wrap > button, .controls .search input, .controls .priority { box-sizing: border-box; height: var(--control-height); min-height: var(--control-height); } button { border: 1px solid var(--border); border-radius: var(--radius); padding: .46rem .45rem; background: var(--surface); color: inherit; cursor: pointer; font-size: .76rem; } button:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); } button.active { border-color: var(--accent); background: var(--accent); color: var(--text-on-accent); font-weight: 700; } .search span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); } input { min-width: 17rem; padding: .46rem .65rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); }
++  .priority { display: flex; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius); } .priority button { height: 100%; min-height: 0; border: 0; border-radius: 0; padding: 0 .35rem; text-transform: capitalize; } .priority button + button { border-left: 1px solid var(--border); } .menu-wrap { position: relative; } .popover { position: absolute; z-index: 3; top: calc(100% + .35rem); right: 0; display: grid; min-width: 13rem; padding: .25rem; border: var(--border-width) solid var(--accent); box-shadow: var(--glow); border-radius: var(--radius); background: var(--bg-deep); } .popover button { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border: 0; text-align: left; } .popover small { color: var(--text-muted); } .popover i { width: .55rem; height: .55rem; border-radius: 999px; } .new-ticket { border-color: var(--accent); background: var(--accent); color: var(--text-on-accent); font-weight: 700; } .new-ticket:hover { border-color: var(--accent); background: var(--accent); color: var(--text-on-accent); box-shadow: var(--glow); }
++  .app-actions { display: contents; } .app-actions[hidden] { display: none; } .session-search input { width: 22rem; }
++  @media (max-width: 820px) { .toolbar { grid-template-columns: minmax(0, 1fr); gap: .7rem; } input { min-width: 0; } .controls { justify-content: start; } .search { flex: 1 0 100%; order: -1; } .search input { width: 100%; } }
+ </style>
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/shell/clawd.ts work/app/src/lib/components/shell/clawd.ts
+--- upstream/app/src/lib/components/shell/clawd.ts	1970-01-01 01:00:00.000000000 +0100
++++ work/app/src/lib/components/shell/clawd.ts	2026-10-20 12:30:31.523314209 +0200
+@@ -0,0 +1,33 @@
++// Clawd, the Claude Code mascot, as pixel art on a 16 × 10 grid: the block art of the Claude Code welcome screen.
++// The sidebar logo and the desktop notification icon draw it from here; public/favicon.svg holds the same paths,
++// and test/clawd.test.ts keeps the two identical.
++export type PixelRect = readonly [x: number, y: number, width: number, height: number];
++
++export const CLAWD_WIDTH = 16;
++export const CLAWD_HEIGHT = 10;
++export const CLAWD_BODY_COLOR = '#d77757';
++export const CLAWD_EYE_COLOR = '#1f1e1d';
++
++export const CLAWD_BODY: readonly PixelRect[] = [
++  [2, 0, 12, 8],
++  [0, 4, 2, 2], [14, 4, 2, 2],
++  [3, 8, 1, 2], [5, 8, 1, 2], [10, 8, 1, 2], [12, 8, 1, 2]
++];
++
++export const CLAWD_EYES: readonly PixelRect[] = [[4, 2, 1, 2], [11, 2, 1, 2]];
++
++export function clawdPath(rects: readonly PixelRect[]): string {
++  return rects.map(([x, y, width, height]) => `M${x} ${y}h${width}v${height}h-${width}z`).join('');
++}
++
++// Clawd centered on a square canvas of `size` pixels, scaled by a whole number so the pixels stay sharp.
++export function drawClawd(context: Pick<CanvasRenderingContext2D, 'fillStyle' | 'fillRect'>, size: number): void {
++  const scale = Math.max(1, Math.floor((size * 7) / 8 / CLAWD_WIDTH));
++  const left = Math.floor((size - CLAWD_WIDTH * scale) / 2);
++  const top = Math.floor((size - CLAWD_HEIGHT * scale) / 2);
++  const layers: [string, readonly PixelRect[]][] = [[CLAWD_BODY_COLOR, CLAWD_BODY], [CLAWD_EYE_COLOR, CLAWD_EYES]];
++  for (const [color, rects] of layers) {
++    context.fillStyle = color;
++    for (const [x, y, width, height] of rects) context.fillRect(left + x * scale, top + y * scale, width * scale, height * scale);
++  }
++}
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/ticket/CommentThread.svelte work/app/src/lib/components/ticket/CommentThread.svelte
+--- upstream/app/src/lib/components/ticket/CommentThread.svelte	2026-10-20 10:03:50.857427169 +0200
++++ work/app/src/lib/components/ticket/CommentThread.svelte	2026-10-20 16:05:05.640507380 +0200
+@@ -1,14 +1,46 @@
+ <script lang="ts">
+ 	import type { BoardState } from '../../state/board.svelte';
+ 	import type { Ticket } from '../../types';
+-	import { renderMarkdown } from './markdown';
++	import { codeCopy, renderMarkdown } from './markdown';
+ 	import Button from '../ui/Button.svelte';
+ 
+ 	let { board, ticket }: { board: BoardState; ticket: Ticket } = $props();
+ 	let body = $state('');
+-	let comments = $derived((ticket.comments as { id?: string; by?: string; at?: string; body?: string }[] | undefined) ?? []);
++	let editingId = $state<string | null>(null);
++	let editBody = $state('');
++	let savingEdit = $state(false);
++	let comments = $derived((ticket.comments as { id?: string; by?: string; at?: string; editedAt?: string; body?: string }[] | undefined) ?? []);
+ 
+ 	async function post() { if (!body.trim()) return; await board.addComment(ticket, body.trim()); body = ''; }
++
++	function startEdit(comment: { id?: string; body?: string }) {
++		if (!comment.id) return;
++		editingId = comment.id;
++		editBody = comment.body ?? '';
++	}
++
++	function cancelEdit() { editingId = null; editBody = ''; }
++
++	async function saveEdit() {
++		if (!editingId || !editBody.trim() || savingEdit) return;
++		savingEdit = true;
++		try { await board.editComment(ticket, editingId, editBody.trim()); cancelEdit(); }
++		finally { savingEdit = false; }
++	}
++
++	async function remove(comment: { id?: string }) {
++		if (!comment.id || !confirm('Delete this comment?')) return;
++		await board.deleteComment(ticket, comment.id);
++		if (editingId === comment.id) cancelEdit();
++	}
++
++	// Escape cancels only the comment edit, not the whole dialog; Ctrl/Cmd+Enter saves.
++	function editKeys(event: KeyboardEvent) {
++		if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); cancelEdit(); }
++		if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); saveEdit(); }
++	}
++
++	function focusField(node: HTMLTextAreaElement) { node.focus(); node.setSelectionRange(node.value.length, node.value.length); }
+ </script>
+ 
+ <section class="comments">
+@@ -16,7 +48,15 @@
+ 	{#if comments.length}
+ 		<div class="thread">
+ 			{#each comments as comment, index (comment.id ?? `${comment.at}-${index}`)}
+-				<article><header><strong>{comment.by ?? 'Unknown'}</strong><time>{comment.at ? new Date(comment.at).toLocaleString() : ''}</time></header><div class="markdown">{@html renderMarkdown(comment.body)}</div></article>
++				<article>
++					<header><strong>{comment.by ?? 'Unknown'}</strong><span class="meta"><time title={comment.editedAt ? `Edited ${new Date(comment.editedAt).toLocaleString()}` : undefined}>{comment.at ? new Date(comment.at).toLocaleString() : ''}{comment.editedAt ? ' · edited' : ''}</time>{#if comment.id && editingId !== comment.id}<button class="edit-comment" type="button" aria-label="Edit comment" onclick={() => startEdit(comment)}>✎ Edit</button><button class="edit-comment delete" type="button" aria-label="Delete comment" onclick={() => remove(comment)}>✕ Delete</button>{/if}</span></header>
++					{#if editingId === comment.id}
++						<textarea class="edit" bind:value={editBody} aria-label="Edit comment" use:focusField onkeydown={editKeys}></textarea>
++						<div class="actions"><Button variant="primary" disabled={!editBody.trim() || savingEdit} onclick={saveEdit}>Save</Button><Button variant="quiet" onclick={cancelEdit}>Cancel</Button></div>
++					{:else}
++						<div class="markdown" use:codeCopy>{@html renderMarkdown(comment.body)}</div>
++					{/if}
++				</article>
+ 			{/each}
+ 		</div>
+ 	{:else}<p class="empty">No comments yet.</p>{/if}
+@@ -25,5 +65,6 @@
+ </section>
+ 
+ <style>
+-	.comments { margin:0; } h3 { margin:0 0 .55rem; font-size:.82rem; letter-spacing:.06em; text-transform:uppercase; color:var(--text-muted); } .thread { display:grid; gap:.5rem; max-height:18rem; overflow:auto; scrollbar-width:thin; scrollbar-color:var(--border) transparent; } article { padding:.65rem; border:1px solid var(--border); border-radius:calc(var(--radius) - .1rem); background:color-mix(in srgb, var(--surface) 72%, transparent); } article header { display:flex; justify-content:space-between; gap:.5rem; font-size:.76rem; color:var(--text-muted); } article header strong { color:var(--text); } textarea { box-sizing:border-box; width:100%; min-height:4rem; margin-top:.6rem; padding:.55rem; border:1px solid var(--border); border-radius:calc(var(--radius) - .1rem); background:var(--surface); color:var(--text); } .actions { display:flex; gap:.4rem; margin-top:.45rem; } .empty { color:var(--text-muted); font-size:.84rem; } .markdown :global(p) { margin:.35rem 0 0; } .markdown :global(pre) { overflow:auto; }
++	.comments { margin:0; } h3 { margin:0 0 .55rem; font-size:.82rem; letter-spacing:.06em; text-transform:uppercase; color:var(--text-muted); } .thread { display:grid; gap:.5rem; max-height:32rem; overflow:auto; scrollbar-width:thin; scrollbar-color:var(--border) transparent; } article { min-width:0; padding:.65rem; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface-muted); } article header { display:flex; justify-content:space-between; align-items:center; gap:.5rem; margin-bottom:.35rem; font-size:.74rem; color:var(--text-muted); } article header strong { color:var(--accent); } .meta { display:flex; align-items:center; gap:.45rem; } textarea { box-sizing:border-box; width:100%; min-height:4rem; margin-top:.6rem; padding:.55rem; border:var(--border-width) solid var(--border); border-radius:var(--radius); background:var(--surface-muted); color:var(--text); font:inherit; } textarea.edit { min-height:7rem; margin-top:0; background:var(--surface-card); resize:vertical; } textarea:focus { border-color:var(--accent); } .actions { display:flex; gap:.4rem; margin-top:.45rem; } .empty { color:var(--text-muted); font-size:.84rem; } .markdown { font-size:.82rem; }
++	.edit-comment { min-height:0; padding:.1rem .45rem; border:1px solid var(--border); border-radius:var(--radius); background:transparent; color:var(--accent); font-size:.7rem; font-weight:700; cursor:pointer; } .edit-comment:hover { border-color:var(--accent); background:var(--accent-soft); } .edit-comment.delete { color:var(--danger, #e5484d); } .edit-comment.delete:hover { border-color:var(--danger, #e5484d); background:transparent; }
+ </style>
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/ticket/LinkEditor.svelte work/app/src/lib/components/ticket/LinkEditor.svelte
+--- upstream/app/src/lib/components/ticket/LinkEditor.svelte	2026-10-20 10:03:50.857427169 +0200
++++ work/app/src/lib/components/ticket/LinkEditor.svelte	2026-10-20 10:34:59.179134082 +0200
+@@ -27,5 +27,5 @@
+ </section>
+ 
+ <style>
+-	.links { margin:0; } h3 { margin:0 0 .55rem; font-size:.82rem; letter-spacing:.06em; text-transform:uppercase; color:var(--text-muted); } .link-list { display:grid; gap:.35rem; } .link { display:flex; align-items:center; justify-content:space-between; gap:.5rem; padding:.45rem .55rem; border:1px solid var(--border); border-radius:calc(var(--radius) - .1rem); font-size:.82rem; } .add-link { display:grid; grid-template-columns:minmax(7.5rem, .6fr) minmax(0, 1fr) auto; gap:.4rem; margin-top:.55rem; } @media (max-width:520px) { .add-link { grid-template-columns:1fr; } }
++	.links { margin:0; } h3 { margin:0 0 .55rem; font-size:.82rem; letter-spacing:.06em; text-transform:uppercase; color:var(--text-muted); } .link-list { display:grid; gap:.35rem; } .link { display:flex; align-items:center; justify-content:space-between; gap:.5rem; padding:.45rem .55rem; border:1px solid var(--border); border-radius:calc(var(--radius) - .1rem); font-size:.82rem; } .add-link { display:grid; grid-template-columns:minmax(0, .8fr) minmax(0, 1.2fr); gap:.4rem; margin-top:.55rem; } .add-link :global(.ui-button) { grid-column:1 / -1; justify-self:end; } @media (max-width:520px) { .add-link { grid-template-columns:1fr; } }
+ </style>
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/ticket/TicketDialog.svelte work/app/src/lib/components/ticket/TicketDialog.svelte
+--- upstream/app/src/lib/components/ticket/TicketDialog.svelte	2026-10-20 10:03:50.857427169 +0200
++++ work/app/src/lib/components/ticket/TicketDialog.svelte	2026-10-20 10:35:28.629317560 +0200
+@@ -7,7 +7,7 @@
+ 	import CommentThread from './CommentThread.svelte';
+ 	import LinkEditor from './LinkEditor.svelte';
+ 	import ReminderEditor from './ReminderEditor.svelte';
+-	import { renderMarkdown } from './markdown';
++	import { codeCopy, renderMarkdown } from './markdown';
+ 	import Button from '../ui/Button.svelte';
+ 	import Dialog from '../ui/Dialog.svelte';
+ 	import Select, { type SelectOption } from '../ui/Select.svelte';
+@@ -49,6 +49,10 @@
+ 		board.openDialog = null;
+ 	}
+ 
++	function focusField(node: HTMLTextAreaElement) {
++		node.focus();
++	}
++
+ 	function split(value: string) {
+ 		return value.split(',').map((entry) => entry.trim()).filter(Boolean);
+ 	}
+@@ -111,10 +115,19 @@
+ 	{#if board.openDialog === 'create' || editingTicket}
+ 		<div class="dialog-content" data-tour="ticket-dialog">
+ 			<header class="dialog-header"><div><h2>{editingTicket ? editingTicket.ref : 'New ticket'}</h2><small>{saving ? 'Saving…' : editingTicket?.updatedAt ? `Updated ${new Date(editingTicket.updatedAt).toLocaleString()}` : 'Fill in the ticket details.'}</small></div><Button variant="quiet" onclick={close}>Close</Button></header>
+-			<div class="main-grid">
++			<div class="main-grid" class:single={!editingTicket}>
+ 				<div class="fields">
+ 					<label><span>Title</span><input aria-label="Title" value={editingTicket?.title ?? title} onblur={(event) => autosave('title', event.currentTarget.value)} oninput={(event) => { if (!editingTicket) title = event.currentTarget.value; }} /></label>
+-					<label><span>Details</span>{#if editingTicket && !detailsEditing}<button class="description" type="button" onclick={() => detailsEditing = true}>{#if editingTicket.description}<div class="markdown">{@html renderMarkdown(editingTicket.description)}</div>{:else}<span>Add details…</span>{/if}</button>{:else}<textarea aria-label="Details" value={editingTicket?.description ?? details} placeholder="Details" oninput={(event) => { if (!editingTicket) details = event.currentTarget.value; }} onblur={(event) => { detailsEditing = false; autosave('description', event.currentTarget.value); }}></textarea>{/if}</label>
++					<div class="details">
++						<div class="details-head"><span>Details</span>{#if editingTicket && !detailsEditing}<button class="edit-details" type="button" onclick={() => detailsEditing = true}>✎ Edit</button>{:else if editingTicket}<small>markdown · saves when you click outside</small>{/if}</div>
++						{#if editingTicket && !detailsEditing}
++							{#if editingTicket.description}<div class="description markdown" use:codeCopy>{@html renderMarkdown(editingTicket.description)}</div>{:else}<button class="description empty" type="button" onclick={() => detailsEditing = true}>Add details…</button>{/if}
++						{:else if editingTicket}
++							<textarea aria-label="Details" value={editingTicket.description ?? ''} placeholder="Details (markdown)" use:focusField onblur={(event) => { detailsEditing = false; autosave('description', event.currentTarget.value); }}></textarea>
++						{:else}
++							<textarea aria-label="Details" value={details} placeholder="Details (markdown)" oninput={(event) => { details = event.currentTarget.value; }}></textarea>
++						{/if}
++					</div>
+ 					<div class="three"><label><span>Priority</span><Select label="Priority" value={editingTicket?.priority ?? priority} options={priorityOptions} onchange={(value) => updateField('priority', value)} /></label><label><span>Status</span><Select label="Status" value={editingTicket?.status ?? status} options={statusOptions} onchange={(value) => updateField('status', value)} /></label><label><span>Assignee</span><Select label="Assignee" value={editingTicket?.assignee === 'you' ? 'you' : assignee} options={assigneeOptions} onchange={(value) => updateField('assignee', value)} /></label></div>
+ 					{#if !editingTicket && board.selectedProject === 'all'}<label><span>Board</span><Select label="Board" bind:value={project} options={projectOptions} /></label>{/if}
+ 					<label><span>Category</span><Select label="Category" value={categoryValue} options={categoryOptions} onchange={(value) => updateField('category', value)} /></label>
+@@ -132,5 +145,18 @@
+ </Dialog>
+ 
+ <style>
+-	.dialog-content { display:grid; grid-template-rows:auto minmax(0, 1fr) auto; min-block-size:0; max-block-size:inherit; overflow:hidden; } .dialog-header { display:flex; justify-content:space-between; gap:1rem; align-items:start; padding:1.25rem; border-bottom:1px solid var(--border); } h2 { margin:0; font-family:var(--font-serif); font-size:1.25rem; line-height:1.1; } small { color:var(--text-muted); } .main-grid { display:grid; grid-template-columns:minmax(0, 1.25fr) minmax(19rem, .75fr); gap:1.5rem; min-block-size:0; overflow:auto; margin:0; padding:1.25rem; scrollbar-width:thin; scrollbar-color:var(--border-strong) transparent; } .fields { display:grid; gap:.8rem; min-width:0; } label { display:grid; gap:.3rem; } input, textarea { box-sizing:border-box; width:100%; padding:.55rem; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface-muted); color:var(--text); } textarea { min-height:10rem; resize:vertical; } .description { min-height:6rem; padding:.6rem; border:1px solid var(--border); border-radius:var(--radius); text-align:left; color:var(--text); background:var(--surface-muted); } .description span { color:var(--text-muted); } .three { display:grid; grid-template-columns:repeat(3, 1fr); gap:.5rem; } .check { display:flex; align-items:center; gap:.5rem; } .check input { width:auto; } aside { display:grid; align-content:start; gap:.8rem; min-width:0; } aside :global(section) { padding:.8rem; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface-muted); } footer { display:flex; justify-content:end; gap:.5rem; margin:0; padding:1.25rem; border-top:1px solid var(--border); background:var(--surface-card); } footer.editor-actions { justify-content:space-between; } .markdown :global(p) { margin:.3rem 0; } @media (max-width:720px) { .main-grid, .three { grid-template-columns:1fr; } }
++	.dialog-content { display:grid; grid-template-rows:auto minmax(0, 1fr) auto; min-block-size:0; max-block-size:inherit; overflow:hidden; } .dialog-header { display:flex; justify-content:space-between; gap:1rem; align-items:start; padding:1rem 1.25rem; border-bottom:var(--border-width) solid var(--border); } h2 { margin:0; color:var(--accent); font-family:var(--font-serif); font-size:1.2rem; letter-spacing:.04em; line-height:1.1; } small { color:var(--text-muted); }
++	/* Two columns that scroll on their own: the ticket on the left, reminder, links and comments on the right. */
++	.main-grid { display:grid; grid-template-columns:minmax(0, 1fr) minmax(22rem, 28rem); min-block-size:0; overflow:hidden; margin:0; } .main-grid.single { grid-template-columns:minmax(0, 1fr); overflow:auto; }
++	.fields { display:grid; align-content:start; gap:.9rem; min-width:0; min-block-size:0; overflow:auto; padding:1.25rem; } label { display:grid; grid-template-columns:minmax(0, 1fr); gap:.3rem; min-width:0; } label > span, .details-head > span { color:var(--text-muted); font-size:.74rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
++	input, textarea { box-sizing:border-box; width:100%; padding:.55rem; border:var(--border-width) solid var(--border); border-radius:var(--radius); background:var(--surface-muted); color:var(--text); } input:focus, textarea:focus { border-color:var(--accent); } textarea { min-height:10rem; resize:vertical; font:inherit; line-height:1.5; } .details textarea { min-height:clamp(14rem, 45vh, 32rem); }
++	.details { display:grid; grid-template-columns:minmax(0, 1fr); gap:.3rem; min-width:0; } .details-head { display:flex; align-items:center; justify-content:space-between; gap:.75rem; min-height:1.6rem; } .details-head small { font-size:.72rem; } .edit-details { min-height:0; padding:.2rem .6rem; border:1px solid var(--border); border-radius:var(--radius); background:transparent; color:var(--accent); font-size:.76rem; font-weight:700; cursor:pointer; } .edit-details:hover { border-color:var(--accent); background:var(--accent-soft); }
++	.description { min-width:0; min-height:6rem; padding:1rem 1.15rem; border:var(--border-width) solid var(--border); border-radius:var(--radius); background:var(--surface-muted); } .description.empty { color:var(--text-muted); text-align:left; cursor:text; } .description.empty:hover { border-color:var(--accent); }
++	.three { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:.5rem; } .check { display:flex; align-items:center; gap:.5rem; } .check input { width:auto; }
++	aside { display:grid; align-content:start; gap:1.4rem; min-width:0; min-block-size:0; overflow:auto; padding:1.5rem 1.25rem 1.25rem; border-left:var(--border-width) solid var(--border); }
++	/* glowup boxes: the section title sits in the top border. */
++	aside :global(section) { position:relative; padding:1.05rem .85rem .85rem; border:var(--border-width) solid var(--border); border-radius:var(--radius); background:transparent; } aside :global(section > h3) { position:absolute; top:-.72em; left:.6rem; margin:0; padding:0 .45rem; background:var(--surface-card); color:var(--text); font-size:.74rem; font-weight:800; letter-spacing:.1em; line-height:1.4; text-transform:uppercase; }
++	footer { display:flex; justify-content:end; gap:.5rem; margin:0; padding:1rem 1.25rem; border-top:var(--border-width) solid var(--border); background:var(--surface-card); } footer.editor-actions { justify-content:space-between; }
++	@media (max-width:880px) { .main-grid { grid-template-columns:minmax(0, 1fr); overflow:auto; } .fields, aside { overflow:visible; min-block-size:auto; } aside { border-left:0; border-top:var(--border-width) solid var(--border); } }
++	@media (max-width:720px) { .three { grid-template-columns:minmax(0, 1fr); } }
+ </style>
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/ticket/markdown.ts work/app/src/lib/components/ticket/markdown.ts
+--- upstream/app/src/lib/components/ticket/markdown.ts	2026-10-20 10:03:50.857427169 +0200
++++ work/app/src/lib/components/ticket/markdown.ts	2026-10-20 10:31:39.457615113 +0200
+@@ -1,3 +1,5 @@
++import { Marked, type RendererObject } from 'marked';
++
+ function escapeHtml(value: string) {
+ 	return value
+ 		.replaceAll('&', '&amp;')
+@@ -7,89 +9,89 @@
+ 		.replaceAll("'", '&#39;');
+ }
+ 
+-function safeHref(value: string) {
+-	const href = value.trim();
++const allowedSchemes = new Set(['http', 'https', 'mailto']);
++
++// Browsers drop tabs, newlines and other control characters from a URL before reading its scheme,
++// so "java\tscript:" must be judged with them removed.
++export function safeHref(value: string) {
++	const href = value.replace(/[\u0000- \u007f-\u009f]/g, '');
++	if (!href) return null;
+ 	const scheme = href.match(/^([a-z][a-z0-9+.-]*):/i)?.[1]?.toLowerCase();
+-	return !scheme || ['http', 'https', 'mailto'].includes(scheme) ? href : null;
++	if (scheme) return allowedSchemes.has(scheme) ? href : null;
++	return /^[^/?#]*:/.test(href) ? null : href;
+ }
+ 
+-function renderInline(value: string) {
+-	const escaped = escapeHtml(value);
+-	return escaped
+-		.replace(/`([^`]+)`/g, '<code>$1</code>')
+-		.replace(/\[([^\]]+)]\(([^\s)]+)\)/g, (_match, label, href) => {
+-			const safe = safeHref(href);
+-			if (!safe) return label;
+-			const external = /^https?:/i.test(safe) ? ' target="_blank" rel="noopener noreferrer"' : '';
+-			return `<a href="${safe}"${external}>${label}</a>`;
+-		})
+-		.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+-		.replace(/(^|[\s([])\*([^*\n]+)\*(?=[\s).,!?:;\]]|$)/g, '$1<em>$2</em>')
+-		.replace(/(^|[\s([])_([^_\n]+)_(?=[\s).,!?:;\]]|$)/g, '$1<em>$2</em>');
+-}
++const renderer: RendererObject = {
++	// Source HTML is shown as text, never rendered.
++	html({ text }) {
++		return escapeHtml(text);
++	},
++	link({ href, title, tokens }) {
++		const label = this.parser.parseInline(tokens);
++		const safe = safeHref(href);
++		if (!safe) return label;
++		const titleAttribute = title ? ` title="${escapeHtml(title)}"` : '';
++		const external = /^(https?:)?\/\//i.test(safe) ? ' target="_blank" rel="noopener noreferrer"' : '';
++		return `<a href="${escapeHtml(safe)}"${titleAttribute}${external}>${label}</a>`;
++	},
++	image({ href, title, text }) {
++		const safe = safeHref(href);
++		if (!safe || /^mailto:/i.test(safe)) return escapeHtml(text);
++		const titleAttribute = title ? ` title="${escapeHtml(title)}"` : '';
++		return `<img src="${escapeHtml(safe)}" alt="${escapeHtml(text)}"${titleAttribute} loading="lazy">`;
++	},
++	code({ text, lang }) {
++		const language = (lang ?? '').match(/^\S*/)?.[0] ?? '';
++		const languageClass = language ? ` class="language-${escapeHtml(language)}"` : '';
++		return `<div class="code-block"><div class="code-head"><span class="code-lang">${escapeHtml(language || 'text')}</span><button type="button" class="code-copy" data-copy-code>copy</button></div><pre><code${languageClass}>${escapeHtml(text.replace(/\n$/, ''))}</code></pre></div>`;
++	}
++};
++
++// GitHub-flavored markdown; single newlines stay line breaks, as in GitHub issues and comments.
++const markdown = new Marked({ gfm: true, breaks: true, renderer });
+ 
+ export function renderMarkdown(value: string | undefined) {
+-	const lines = String(value ?? '').split(/\r\n|\r|\n/);
+-	const blocks: string[] = [];
+-	let paragraph: string[] = [];
+-	let code: string[] | null = null;
+-	let list: { type: 'ul' | 'ol'; items: string[] } | null = null;
+-
+-	const flushParagraph = () => {
+-		if (paragraph.length) blocks.push(`<p>${paragraph.map(renderInline).join('<br>')}</p>`);
+-		paragraph = [];
+-	};
+-	const flushList = () => {
+-		if (list) blocks.push(`<${list.type}>${list.items.map((item) => `<li>${renderInline(item)}</li>`).join('')}</${list.type}>`);
+-		list = null;
+-	};
+-
+-	for (const line of lines) {
+-		if (code) {
+-			if (/^```\s*$/.test(line)) {
+-				blocks.push(`<pre><code>${escapeHtml(code.join('\n'))}</code></pre>`);
+-				code = null;
+-			} else code.push(line);
+-			continue;
+-		}
+-		if (/^```/.test(line)) {
+-			flushParagraph();
+-			flushList();
+-			code = [];
+-			continue;
+-		}
+-		const heading = line.match(/^(#{1,6})\s+(.+)$/);
+-		const listItem = line.match(/^\s*([-*+]|\d+\.)\s+(.+)$/);
+-		if (heading) {
+-			flushParagraph();
+-			flushList();
+-			blocks.push(`<h${heading[1].length}>${renderInline(heading[2])}</h${heading[1].length}>`);
+-		} else if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+-			flushParagraph();
+-			flushList();
+-			blocks.push('<hr>');
+-		} else if (line.startsWith('>')) {
+-			flushParagraph();
+-			flushList();
+-			blocks.push(`<blockquote><p>${renderInline(line.replace(/^>\s?/, ''))}</p></blockquote>`);
+-		} else if (listItem) {
+-			flushParagraph();
+-			const type = /\d+\./.test(listItem[1]) ? 'ol' : 'ul';
+-			if (!list || list.type !== type) {
+-				flushList();
+-				list = { type, items: [] };
+-			}
+-			list.items.push(listItem[2]);
+-		} else if (!line.trim()) {
+-			flushParagraph();
+-			flushList();
+-		} else {
+-			flushList();
+-			paragraph.push(line);
+-		}
+-	}
+-	if (code) blocks.push(`<pre><code>${escapeHtml(code.join('\n'))}</code></pre>`);
+-	flushParagraph();
+-	flushList();
+-	return blocks.join('');
++	return markdown.parse(String(value ?? ''), { async: false });
++}
++
++function flash(button: HTMLElement, label: string) {
++	button.textContent = label;
++	button.dataset.state = label;
++	setTimeout(() => {
++		button.textContent = 'copy';
++		delete button.dataset.state;
++	}, 1400);
++}
++
++function copyWithSelection(text: string) {
++	const field = document.createElement('textarea');
++	field.value = text;
++	field.setAttribute('readonly', '');
++	field.style.position = 'fixed';
++	field.style.opacity = '0';
++	document.body.append(field);
++	field.select();
++	const copied = document.execCommand('copy');
++	field.remove();
++	return copied;
++}
++
++// Click handler for rendered markdown: copies a code block when its copy button is pressed.
++// Returns true when the click was a copy, so callers can skip their own click behavior.
++export function copyCodeFromClick(event: MouseEvent) {
++	const button = (event.target as Element | null)?.closest?.('[data-copy-code]');
++	if (!(button instanceof HTMLElement)) return false;
++	event.preventDefault();
++	event.stopPropagation();
++	const code = button.closest('.code-block')?.querySelector('pre code')?.textContent ?? '';
++	if (navigator.clipboard?.writeText) {
++		navigator.clipboard.writeText(code).then(() => flash(button, 'copied'), () => flash(button, copyWithSelection(code) ? 'copied' : 'failed'));
++	} else flash(button, copyWithSelection(code) ? 'copied' : 'failed');
++	return true;
++}
++
++// Svelte action for an element holding rendered markdown: wires up the code copy buttons.
++export function codeCopy(node: HTMLElement) {
++	node.addEventListener('click', copyCodeFromClick);
++	return { destroy: () => node.removeEventListener('click', copyCodeFromClick) };
+ }
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/ui/Button.svelte work/app/src/lib/components/ui/Button.svelte
+--- upstream/app/src/lib/components/ui/Button.svelte	2026-10-20 10:03:50.857427169 +0200
++++ work/app/src/lib/components/ui/Button.svelte	2026-10-20 10:32:35.558355257 +0200
+@@ -9,9 +9,11 @@
+ </button>
+ 
+ <style>
+-  .ui-button { display:inline-flex; min-height:2.25rem; align-items:center; justify-content:center; gap:.4rem; border:1px solid var(--border); border-radius:calc(var(--radius) - .15rem); padding:.45rem .75rem; background:var(--surface-muted); color:var(--text); font:600 .78rem var(--font-sans); }
+-  .ui-button.primary { border-color:var(--accent); background:var(--accent); color:oklch(.16 .03 235); }
++  .ui-button { display:inline-flex; min-height:2.25rem; align-items:center; justify-content:center; gap:.4rem; border:var(--border-width) solid var(--border); border-radius:var(--radius); padding:.45rem .75rem; background:var(--surface-muted); color:var(--text); font:700 .76rem var(--font-sans); letter-spacing:.02em; }
++  .ui-button:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
++  .ui-button.primary { border-color:var(--accent); background:var(--accent); color:var(--text-on-accent); }
++  .ui-button.primary:hover:not(:disabled) { color:var(--text-on-accent); box-shadow:var(--glow); }
+   .ui-button.quiet { border-color:transparent; background:transparent; color:var(--text-muted); }
+-  .ui-button.danger { color:var(--danger); }
++  .ui-button.danger { color:var(--danger); } .ui-button.danger:hover:not(:disabled) { border-color:var(--danger); color:var(--danger); }
+   .ui-button:disabled { cursor:not-allowed; opacity:.55; }
+ </style>
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/ui/DateTimePicker.svelte work/app/src/lib/components/ui/DateTimePicker.svelte
+--- upstream/app/src/lib/components/ui/DateTimePicker.svelte	2026-10-20 10:03:50.857427169 +0200
++++ work/app/src/lib/components/ui/DateTimePicker.svelte	2026-10-20 10:32:35.558355257 +0200
+@@ -23,5 +23,5 @@
+ </label>
+ 
+ <style>
+-	.date-picker { display:flex; min-height:2.45rem; align-items:center; gap:.45rem; padding:0 .65rem; border:1px solid var(--border); border-radius:calc(var(--radius) - .1rem); background:var(--surface-muted); } .date-picker:focus-within { border-color:var(--accent); box-shadow:var(--focus-ring); } .calendar { color:var(--accent); font-family:var(--font-mono); font-size:.9rem; } input { width:100%; border:0; outline:0; background:transparent; color:var(--text); } input::placeholder { color:var(--text-muted); }
++	.date-picker { display:flex; min-height:2.45rem; align-items:center; gap:.45rem; padding:0 .65rem; border:var(--border-width) solid var(--border); border-radius:var(--radius); background:var(--surface-muted); } .date-picker:focus-within { border-color:var(--accent); } .calendar { color:var(--accent); font-family:var(--font-mono); font-size:.9rem; } input { width:100%; border:0; outline:0; background:transparent; color:var(--text); } input::placeholder { color:var(--text-muted); }
+ </style>
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/ui/Dialog.svelte work/app/src/lib/components/ui/Dialog.svelte
+--- upstream/app/src/lib/components/ui/Dialog.svelte	2026-10-20 10:03:50.857427169 +0200
++++ work/app/src/lib/components/ui/Dialog.svelte	2026-10-20 12:00:32.630618286 +0200
+@@ -52,16 +52,18 @@
+     margin: auto;
+     padding: 0;
+     overflow: hidden;
+-    border: 1px solid var(--border-strong);
+-    border-radius: 6px;
++    border: var(--border-width) solid var(--dialog-border);
++    border-radius: var(--radius);
+     background: var(--surface-card);
+     color: var(--text);
+-    box-shadow: 0 18px 56px rgb(12 16 22 / .28), 0 2px 8px rgb(12 16 22 / .16);
++    box-shadow: var(--dialog-shadow);
+   }
+ 
+   dialog:not([open]) { display: none; }
+ 
+   dialog.wide { inline-size: min(70rem, calc(100vw - 2 * var(--dialog-gutter))); }
++  /* A ticket gets most of the screen: the description on the left, reminder, links and comments beside it. */
++  dialog.ticket-dialog { inline-size: min(92rem, calc(100vw - 2 * var(--dialog-gutter))); block-size: min(64rem, calc(100dvh - 2 * var(--dialog-gutter))); }
+   dialog::backdrop { background: color-mix(in oklch, var(--bg-deep), transparent 22%); backdrop-filter: blur(4px); }
+ 
+   @media (max-width: 560px) {
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/components/ui/Select.svelte work/app/src/lib/components/ui/Select.svelte
+--- upstream/app/src/lib/components/ui/Select.svelte	2026-10-20 10:03:50.857427169 +0200
++++ work/app/src/lib/components/ui/Select.svelte	2026-10-20 10:34:59.179134082 +0200
+@@ -59,5 +59,5 @@
+ </div>
+ 
+ <style>
+-	.select { position:relative; min-width:0; } .select > button { display:flex; width:100%; min-height:2.45rem; align-items:center; justify-content:space-between; gap:.5rem; padding:.5rem .65rem; border:1px solid var(--border); border-radius:calc(var(--radius) - .1rem); background:var(--surface-muted); color:var(--text); text-align:left; } .select > button:hover, .select > button.open { border-color:var(--accent); background:color-mix(in srgb, var(--accent-soft) 65%, var(--surface-muted)); } .select > button:disabled { cursor:not-allowed; opacity:.55; } .placeholder { color:var(--text-muted); } .chevron { color:var(--accent); font-family:var(--font-mono); font-size:1rem; line-height:1; } .options { position:absolute; z-index:50; top:calc(100% + .35rem); right:0; left:0; display:grid; max-height:15rem; overflow:auto; padding:.25rem; border:1px solid var(--border-strong); border-radius:var(--radius); background:var(--bg-deep); } .options button { min-height:2.25rem; padding:.45rem .55rem; border:0; border-radius:calc(var(--radius) - .2rem); background:transparent; color:var(--text); text-align:left; } .options button:hover, .options button.selected { background:var(--accent-soft); color:var(--accent); } .options button:disabled { cursor:not-allowed; opacity:.45; }
++	.select { position:relative; min-width:0; } .select > button { display:flex; width:100%; min-height:2.45rem; align-items:center; justify-content:space-between; gap:.5rem; padding:.5rem .65rem; border:var(--border-width) solid var(--border); border-radius:var(--radius); background:var(--surface-muted); color:var(--text); text-align:left; } .select > button:hover, .select > button.open { border-color:var(--accent); background:color-mix(in srgb, var(--accent-soft) 65%, var(--surface-muted)); } .select > button:disabled { cursor:not-allowed; opacity:.55; } .select > button > span:first-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .placeholder { color:var(--text-muted); } .chevron { color:var(--accent); font-family:var(--font-mono); font-size:1rem; line-height:1; } .options { position:absolute; z-index:50; top:calc(100% + .35rem); right:0; left:0; display:grid; max-height:15rem; overflow:auto; padding:.25rem; border:var(--border-width) solid var(--accent); border-radius:var(--radius); background:var(--bg-deep); box-shadow:var(--glow); } .options button { min-height:2.25rem; padding:.45rem .55rem; border:0; border-radius:calc(var(--radius) - .2rem); background:transparent; color:var(--text); text-align:left; } .options button:hover, .options button.selected { background:var(--accent-soft); color:var(--accent); } .options button:disabled { cursor:not-allowed; opacity:.45; }
+ </style>
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/sessions/model.ts work/app/src/lib/sessions/model.ts
+--- upstream/app/src/lib/sessions/model.ts	1970-01-01 01:00:00.000000000 +0100
++++ work/app/src/lib/sessions/model.ts	2026-10-20 12:08:43.950552073 +0200
+@@ -0,0 +1,180 @@
++// The Sessions page: every Claude Code session and what was asked in it, as ~/.claude/sidequest-sessions/build.mjs
++// writes it (served under /sessions-data). The shapes and words follow glowup's Plan tab.
++
++export type MilestoneStatus = 'pending' | 'in_progress' | 'verifying' | 'waiting' | 'blocked' | 'completed' | 'failed' | 'skipped';
++export type Milestone = { title: string; status: MilestoneStatus; doing?: string; evidence?: string; blocker?: string };
++export type RequestStatus = 'pending' | 'in_progress' | 'completed' | 'interrupted' | 'failed';
++export type TurnReason = 'answer' | 'aborted' | 'error' | 'refusal';
++
++export interface SessionRequest {
++  id: string;
++  n: number;
++  text: string;
++  status: RequestStatus;
++  at: number;
++  startedAt?: number;
++  endedAt?: number;
++  foldedInto?: string;
++  command?: boolean;
++  turns: { answer: string; reason: TurnReason; durationMs: number; endedAt: number }[];
++  files: { path: string; add: number; del: number; how: 'edit' | 'new' }[];
++  commands: string[];
++  commandCount: number;
++  commits: number;
++  test?: { passed: boolean; summary: string };
++  agents: { name: string; task: string }[];
++  tasks: { id: string; title: string; status: 'pending' | 'in_progress' | 'completed' }[];
++  tools: number;
++  objective?: string;
++  milestones: Milestone[];
++  milestonesFrom?: 'milestones' | 'progress';
++  asked: { question: string; answer?: string }[];
++  followUps?: { questions: string[]; actions: string[] };
++  // set while the request's turn runs: when that turn started
++  runningSince?: number;
++}
++
++export interface MarkdownFile { path: string; name: string; request: number; exists: boolean; href?: string }
++
++export interface Session {
++  format: number;
++  id: string;
++  name: string;
++  project: string;
++  cwd: string;
++  branch: string;
++  startedAt: number;
++  updatedAt: number;
++  live: boolean;
++  costUsd?: number;
++  version: string;
++  from: 'glowup' | 'transcript';
++  requests: SessionRequest[];
++  markdown: MarkdownFile[];
++}
++
++export interface SessionSummary {
++  id: string;
++  name: string;
++  project: string;
++  cwd: string;
++  branch: string;
++  startedAt: number;
++  updatedAt: number;
++  live: boolean;
++  requests: number;
++  done: number;
++  working: number;
++  lastPrompt: string;
++  markdown: number;
++  costUsd?: number;
++  from: 'glowup' | 'transcript';
++}
++
++export interface SessionIndex { format: number; generatedAt: number; sessions: SessionSummary[] }
++
++export const DATA_ROOT = '/sessions-data';
++
++async function getJson<T>(path: string, fetcher: typeof fetch): Promise<T> {
++  const response = await fetcher(`${DATA_ROOT}/${path}`, { cache: 'no-store' });
++  if (!response.ok) throw new Error(response.status === 404 ? 'not built yet' : `HTTP ${response.status}`);
++  return response.json() as Promise<T>;
++}
++
++export const loadIndex = (fetcher: typeof fetch = fetch) => getJson<SessionIndex>('index.json', fetcher);
++export const loadSession = (id: string, fetcher: typeof fetch = fetch) => getJson<Session>(`sessions/${encodeURIComponent(id)}.json`, fetcher);
++
++// A markdown file a session created, as text; its href is under the data root.
++export async function loadMarkdown(href: string, fetcher: typeof fetch = fetch): Promise<string> {
++  if (!href.startsWith('sessions-data/files/')) throw new Error('not a session file');
++  const response = await fetcher(`/${href}`, { cache: 'no-store' });
++  if (!response.ok) throw new Error(response.status === 404 ? 'the file is gone' : `HTTP ${response.status}`);
++  return response.text();
++}
++
++export const STATUS_WORD: Record<RequestStatus, string> = { pending: 'queued', in_progress: 'working', completed: 'done', interrupted: 'interrupted', failed: 'stopped' };
++export const STATUS_MARK: Record<RequestStatus, string> = { pending: '○', in_progress: '◉', completed: '✓', interrupted: '■', failed: '✗' };
++export const MILESTONE_MARK: Record<MilestoneStatus, string> = { pending: '○', in_progress: '◉', verifying: '◎', waiting: '◌', blocked: '!', completed: '✓', failed: '✗', skipped: '–' };
++export const MILESTONE_WORD: Record<MilestoneStatus, string> = { pending: 'pending', in_progress: 'in progress', verifying: 'verifying', waiting: 'waiting', blocked: 'blocked', completed: 'done', failed: 'failed', skipped: 'skipped' };
++
++export function duration(ms: number): string {
++  const s = Math.max(0, Math.round(ms / 1000));
++  if (s < 60) return `${s}s`;
++  const m = Math.floor(s / 60);
++  if (m < 60) return `${m}m ${String(s % 60).padStart(2, '0')}s`;
++  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
++}
++
++export function relativeTime(at: number, now = Date.now()): string {
++  if (!at) return '';
++  const s = Math.round((now - at) / 1000);
++  if (s < 45) return 'just now';
++  const m = Math.round(s / 60);
++  if (m < 60) return `${m} min ago`;
++  const h = Math.round(m / 60);
++  if (h < 24) return `${h} h ago`;
++  const d = Math.round(h / 24);
++  if (d < 30) return `${d} d ago`;
++  return new Date(at).toLocaleDateString();
++}
++
++export const requestTitle = (r: Pick<SessionRequest, 'text'>) => (r.text.split('\n').find((line) => line.trim()) ?? '').replace(/\s+/g, ' ').trim();
++// Every finished turn, plus the running one's time so far.
++export const workedMs = (r: SessionRequest, now = Date.now()) =>
++  r.turns.reduce((sum, turn) => sum + turn.durationMs, 0) + (r.status === 'in_progress' && r.runningSince ? Math.max(0, now - r.runningSince) : 0);
++
++// The steps a request shows: the milestones Claude reported, else its task-list tasks. A prompt taken into another
++// request's turn has none of its own: that turn's are the work done for it, so it shows them (from names that request).
++export function stepsOf(r: SessionRequest, all: readonly SessionRequest[] = []): { steps: Milestone[]; fromTasks: boolean; from?: SessionRequest } {
++  if (r.milestones.length) return { steps: r.milestones, fromTasks: false };
++  const host = r.foldedInto ? all.find((x) => x.id === r.foldedInto) : undefined;
++  if (host && !r.tasks.length) {
++    const h = stepsOf(host, all);
++    if (h.steps.length) return { ...h, from: host };
++  }
++  return { steps: r.tasks.map((task) => ({ title: task.title, status: task.status })), fromTasks: r.tasks.length > 0 };
++}
++
++// The milestone the work is at: the one running, else one being checked, waiting or blocked.
++export function currentMilestone(steps: readonly Milestone[]): number {
++  for (const status of ['in_progress', 'verifying', 'waiting', 'blocked'] as const) {
++    const index = steps.findIndex((step) => step.status === status);
++    if (index >= 0) return index;
++  }
++  return -1;
++}
++
++// Where a request stands, in a line: its status word and the milestone it is at.
++export function standing(r: SessionRequest, all: readonly SessionRequest[] = [], now = Date.now()): string {
++  const { steps } = stepsOf(r, all);
++  const at = currentMilestone(steps), done = steps.filter((step) => step.status === 'completed').length;
++  const where = !steps.length ? '' : at >= 0 ? ` · milestone ${at + 1} of ${steps.length}` : ` · ${done} of ${steps.length} milestones done`;
++  return `${STATUS_WORD[r.status]} · ${duration(workedMs(r, now))}${where}`;
++}
++
++// What is left to the person: questions asked during the work (with the answers given), the questions the last
++// answer puts, and action items (blocked milestones, then the steps the answer gives).
++export function forYou(r: SessionRequest, all: readonly SessionRequest[] = []) {
++  const { steps } = stepsOf(r, all);
++  const blocked = steps.filter((step) => step.status === 'blocked').map((step) => `${step.title}${step.blocker ? ` — ${step.blocker}` : ''}`);
++  const questions = r.followUps?.questions ?? [];
++  const actions = [...blocked, ...(r.followUps?.actions ?? [])];
++  return { asked: r.asked, questions, actions, empty: !r.asked.length && !questions.length && !actions.length };
++}
++
++export const projectLabel = (s: Pick<SessionSummary, 'cwd' | 'project'>) =>
++  (s.cwd || s.project.replace(/^-/, '/').replace(/-/g, '/')).split(/[\\/]+/).filter(Boolean).slice(-2).join(' / ');
++
++export function filterSessions(list: readonly SessionSummary[], query: string): SessionSummary[] {
++  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
++  if (!words.length) return [...list];
++  return list.filter((s) => {
++    const hay = `${s.name} ${s.id} ${s.cwd} ${s.project} ${s.branch} ${s.lastPrompt}`.toLowerCase();
++    return words.every((word) => hay.includes(word));
++  });
++}
++
++export const totals = (r: SessionRequest) => ({ add: r.files.reduce((n, f) => n + f.add, 0), del: r.files.reduce((n, f) => n + f.del, 0) });
++
++// The markdown files a request created, by path, so its file list can link them.
++export const markdownByPath = (session: Pick<Session, 'markdown'>) => new Map(session.markdown.filter((file) => file.href).map((file) => [file.path, file]));
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/state/appearance.ts work/app/src/lib/state/appearance.ts
+--- upstream/app/src/lib/state/appearance.ts	1970-01-01 01:00:00.000000000 +0100
++++ work/app/src/lib/state/appearance.ts	2026-10-20 11:58:12.850294133 +0200
+@@ -0,0 +1,78 @@
++// Theme, light/dark mode and corner style. index.html applies the stored choice before the first paint with a
++// copy of readAppearance + applyAppearance; keep the two in step when palettes or keys change.
++export const PALETTE_STORAGE_KEY = 'sq_arcade_palette';
++export const MODE_STORAGE_KEY = 'sq_arcade_theme';
++export const CORNERS_STORAGE_KEY = 'sq_arcade_corners';
++
++export type Mode = 'light' | 'dark';
++export type Corners = 'soft' | 'hard';
++
++export interface Palette {
++  id: string;
++  name: string;
++  modeNote: string;
++  // Set when the palette exists in one mode only (each Catppuccin flavor); the dark-mode switch is then off.
++  fixedMode?: Mode;
++}
++
++export interface Appearance {
++  palette: string;
++  mode: Mode;
++  corners: Corners;
++}
++
++const CATPPUCCIN_NOTE = 'Each Catppuccin flavor has its own mode: Latte is light, the others are dark.';
++
++export const PALETTES: readonly Palette[] = [
++  { id: 'arcade', name: 'Arcade', modeNote: 'Dark is glowup arcade, neon on deep purple. Off uses arcade light.' },
++  { id: 'clean', name: 'Clean', modeNote: 'The stock sidequest palette and fonts, light or dark.' },
++  { id: 'tokyo-night', name: 'Tokyo Night', modeNote: 'Dark is Tokyo Night. Off uses Tokyo Night Day.' },
++  { id: 'catppuccin-mocha', name: 'Catppuccin Mocha', modeNote: CATPPUCCIN_NOTE, fixedMode: 'dark' },
++  { id: 'catppuccin-latte', name: 'Catppuccin Latte', modeNote: CATPPUCCIN_NOTE, fixedMode: 'light' },
++  { id: 'catppuccin-frappe', name: 'Catppuccin Frappé', modeNote: CATPPUCCIN_NOTE, fixedMode: 'dark' },
++  { id: 'catppuccin-macchiato', name: 'Catppuccin Macchiato', modeNote: CATPPUCCIN_NOTE, fixedMode: 'dark' }
++];
++
++export const DEFAULT_APPEARANCE: Appearance = { palette: 'arcade', mode: 'dark', corners: 'hard' };
++
++export function paletteById(id: string): Palette | undefined {
++  return PALETTES.find((palette) => palette.id === id);
++}
++
++// The mode a palette is shown in: its own for a one-mode palette, otherwise the chosen one.
++export function effectiveMode(paletteId: string, mode: Mode): Mode {
++  return paletteById(paletteId)?.fixedMode ?? mode;
++}
++
++function storedValue(key: string): string | null {
++  try {
++    return localStorage.getItem(key);
++  } catch {
++    return null;
++  }
++}
++
++export function readAppearance(): Appearance {
++  const palette = storedValue(PALETTE_STORAGE_KEY);
++  return {
++    palette: palette && paletteById(palette) ? palette : DEFAULT_APPEARANCE.palette,
++    mode: storedValue(MODE_STORAGE_KEY) === 'light' ? 'light' : 'dark',
++    corners: storedValue(CORNERS_STORAGE_KEY) === 'soft' ? 'soft' : 'hard'
++  };
++}
++
++export function writeAppearance(appearance: Appearance): void {
++  try {
++    localStorage.setItem(PALETTE_STORAGE_KEY, appearance.palette);
++    localStorage.setItem(MODE_STORAGE_KEY, appearance.mode);
++    localStorage.setItem(CORNERS_STORAGE_KEY, appearance.corners);
++  } catch {
++    // Private windows and blocked storage: the choice lasts until the page reloads.
++  }
++}
++
++export function applyAppearance(appearance: Appearance, root: { dataset: DOMStringMap } = document.documentElement): void {
++  root.dataset.palette = appearance.palette;
++  root.dataset.theme = effectiveMode(appearance.palette, appearance.mode);
++  root.dataset.corners = appearance.corners;
++}
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/lib/state/board.svelte.ts work/app/src/lib/state/board.svelte.ts
+--- upstream/app/src/lib/state/board.svelte.ts	2026-10-20 10:03:50.867427220 +0200
++++ work/app/src/lib/state/board.svelte.ts	2026-10-20 16:05:05.630507321 +0200
+@@ -29,11 +29,13 @@
+   notifyPreferences = $state.raw<JsonRecord>({});
+ 
+   selectedProject = $state<Scope>('all');
+-  view = $state<'board' | 'archive'>('board');
++  view = $state<'board' | 'archive' | 'sessions'>('board');
+   priority = $state<'all' | 'urgent' | 'high' | 'normal' | 'low'>('all');
+   assignee = $state<AssigneeFilter>('all');
+   story = $state<string>('all');
+   search = $state('');
++  // The Claude sessions view has its own query, so a ticket search never filters sessions and the other way round.
++  sessionSearch = $state('');
+   sort = $state<'manual' | 'priority' | 'latest' | 'newest'>('manual');
+   inboxTab = $state<'all' | 'needs' | 'activity'>('all');
+   openDialog = $state<string | null>(null);
+@@ -105,6 +107,9 @@
+   selectProject(project: Scope) { this.selectedProject = project; this.view = 'board'; }
+   openArchive() { this.view = 'archive'; this.requestRefresh(); }
+   closeArchive() { this.view = 'board'; }
++  // every Claude Code session and what was asked in it (lib/sessions/model.ts)
++  openSessions() { this.view = 'sessions'; }
++  closeSessions() { this.view = 'board'; }
+   setDragging(value: boolean) { this.dragging = value; if (!value) this.flushPendingSnapshot(); }
+   toast(message: string) { this.toasts = [...this.toasts, message]; }
+   dismissToast(message: string) { this.toasts = this.toasts.filter((toast) => toast !== message); }
+@@ -130,6 +135,8 @@
+   async restoreTicket(ticket: Ticket) { await this.mutate(() => this.api.unarchiveTicket(ticket.id, this.ticketProject(ticket))); }
+   async archiveDone(project: Scope = this.selectedProject) { await this.mutate(() => this.api.archiveDone(project)); }
+   async addComment(ticket: Ticket, body: string) { await this.mutate(() => this.api.addComment(ticket.id, this.ticketProject(ticket), { body, kind: 'comment' })); }
++  async editComment(ticket: Ticket, commentId: string, body: string) { await this.mutate(() => this.api.editComment(ticket.id, this.ticketProject(ticket), commentId, body)); }
++  async deleteComment(ticket: Ticket, commentId: string) { await this.mutate(() => this.api.deleteComment(ticket.id, this.ticketProject(ticket), commentId)); }
+   async scheduleReminder(ticket: Ticket, fireAt: string) { await this.mutate(() => this.api.setReminder(ticket.id, this.ticketProject(ticket), fireAt)); }
+   async cancelReminder(ticket: Ticket) { await this.mutate(() => this.api.cancelReminder(ticket.id, this.ticketProject(ticket))); }
+   async linkTicket(ticket: Ticket, verb: string, to: string) { await this.mutate(() => this.api.linkTicket(ticket.id, this.ticketProject(ticket), verb, to)); }
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/main.ts work/app/src/main.ts
+--- upstream/app/src/main.ts	2026-10-20 10:03:50.867427220 +0200
++++ work/app/src/main.ts	2026-10-20 12:00:32.630618286 +0200
+@@ -5,5 +5,6 @@
+ import '@fontsource-variable/karla/index.css';
+ import './styles/theme.css';
+ import './styles/app.css';
++import './styles/markdown.css';
+ 
+ mount(App, { target: document.getElementById('app')! });
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/styles/app.css work/app/src/styles/app.css
+--- upstream/app/src/styles/app.css	2026-10-20 10:03:50.847427119 +0200
++++ work/app/src/styles/app.css	2026-10-20 12:00:32.620618292 +0200
+@@ -1,16 +1,22 @@
+-body { position: relative; background: var(--bg); color: var(--text); }
+-.card { background: var(--surface-card); border: 1px solid var(--card-border); border-radius: 4px; box-shadow: 0 1px 2px rgb(24 28 34 / .06); transition: border-color var(--motion-fast), background var(--motion-fast), box-shadow var(--motion-fast); }
+-.card:hover { border-color: var(--border-strong); box-shadow: 0 2px 4px rgb(24 28 34 / .09); }
++body { position: relative; background: var(--bg); color: var(--text); font-size: var(--body-font-size); }
++/* glowup's pack gradient as a thin bar across the top of the page */
++body::before { content: ''; position: fixed; z-index: 60; inset: 0 0 auto; height: 2px; background: var(--gradient); pointer-events: none; }
++::selection { background: var(--accent); color: var(--text-on-accent); }
++* { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
++a { color: var(--cyan); }
++.card { background: var(--surface-card); border: var(--border-width) solid var(--card-border); border-radius: var(--radius); box-shadow: var(--shadow); transition: border-color var(--motion-fast), background var(--motion-fast), box-shadow var(--motion-fast); }
++.card:hover { border-color: var(--hover-border); box-shadow: var(--glow); }
+ @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; } }
+ 
+ .app-shell { display: grid; grid-template-columns: 272px minmax(0, 1fr); min-height: 100vh; background: var(--bg); }
+ .workspace { min-width: 0; padding: clamp(1rem, 2vw, 2rem); }
+ .board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; align-items: start; }
+-.panel { background: var(--bg-deep); border: 1px solid var(--border-strong); border-radius: var(--radius); }
++.panel { background: var(--bg-deep); border: var(--border-width) solid var(--border-strong); border-radius: var(--radius); }
+ .overlay { position: fixed; inset: 0; display: grid; place-items: center; background: color-mix(in oklch, var(--bg-deep), transparent 18%); backdrop-filter: blur(4px); }
+ button, input, textarea, select { accent-color: var(--accent); }
+-button { min-height: var(--control-height); transition: border-color var(--motion-fast), background var(--motion-fast), color var(--motion-fast); }
++button { min-height: var(--control-height); transition: border-color var(--motion-fast), background var(--motion-fast), color var(--motion-fast), box-shadow var(--motion-fast); }
+ input, textarea, select { outline-color: var(--accent); }
++input::placeholder, textarea::placeholder { color: var(--text-muted); opacity: .8; }
+ 
+ @media (max-width: 880px) { .settings-grid { grid-template-columns: 1fr; } }
+ @media (max-width: 820px) { .app-shell { grid-template-columns: 1fr; } .workspace { padding: 1rem; } }
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/styles/markdown.css work/app/src/styles/markdown.css
+--- upstream/app/src/styles/markdown.css	1970-01-01 01:00:00.000000000 +0100
++++ work/app/src/styles/markdown.css	2026-10-20 10:34:27.418938423 +0200
+@@ -0,0 +1,54 @@
++/* Rendered markdown (ticket descriptions and comments). Tailwind's preflight strips heading
++   sizes, list markers and margins, so everything a markdown viewer shows is set here. */
++.markdown { min-width: 0; color: var(--text); font-size: .88rem; line-height: 1.6; overflow-wrap: anywhere; }
++.markdown > :first-child { margin-top: 0; }
++.markdown > :last-child { margin-bottom: 0; }
++.markdown :is(p, ul, ol, blockquote, table, dl, .code-block, hr) { margin: 0 0 .9em; }
++
++.markdown :is(h1, h2, h3, h4, h5, h6) { margin: 1.5em 0 .6em; font-weight: 700; line-height: 1.3; letter-spacing: .01em; }
++.markdown h1 { padding-bottom: .3em; border-bottom: 2px solid; border-image: var(--gradient) 1; font-size: 1.45em; }
++.markdown h2 { padding-bottom: .25em; border-bottom: 2px solid var(--border); color: var(--accent); font-size: 1.2em; }
++.markdown h3 { color: var(--cyan); font-size: 1.06em; }
++.markdown :is(h4, h5, h6) { color: var(--text-muted); font-size: .92em; letter-spacing: .06em; text-transform: uppercase; }
++
++.markdown :is(ul, ol) { padding-left: 1.6em; }
++.markdown ul { list-style-type: "▸  "; }
++.markdown ul ul { list-style-type: "◆  "; }
++.markdown ul ul ul { list-style-type: "·  "; }
++.markdown ol { list-style-type: decimal; }
++.markdown ol ol { list-style-type: lower-alpha; }
++.markdown ul > li::marker { color: var(--accent); }
++.markdown ul ul > li::marker { color: var(--cyan); }
++.markdown ol > li::marker { color: var(--cyan); font-weight: 700; }
++.markdown li + li { margin-top: .3em; }
++.markdown li > :is(ul, ol) { margin: .3em 0 0; }
++.markdown li > p { margin: .3em 0; }
++.markdown li:has(> input[type="checkbox"]) { list-style-type: none; }
++.markdown li > input[type="checkbox"] { margin: 0 .5em 0 -1.4em; vertical-align: -.1em; accent-color: var(--success); }
++
++.markdown strong { font-weight: 800; }
++.markdown em { color: var(--agent); }
++.markdown del { color: var(--text-muted); }
++.markdown a { color: var(--cyan); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: .2em; }
++.markdown a:hover { color: var(--accent); }
++
++.markdown code { padding: .1em .35em; border-radius: var(--radius); background: color-mix(in srgb, var(--cyan) 11%, transparent); color: var(--cyan); font: .9em var(--font-mono); overflow-wrap: anywhere; }
++.markdown .code-block { overflow: hidden; border: var(--border-width) solid var(--border); border-radius: var(--radius); background: var(--surface-muted); }
++.markdown .code-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .2rem .25rem .2rem .7rem; border-bottom: 1px solid var(--border); font-size: .72rem; }
++.markdown .code-lang { color: var(--accent); font-weight: 700; letter-spacing: .06em; text-transform: lowercase; }
++.markdown .code-copy { min-height: 0; padding: .12rem .55rem; border: 1px solid var(--border); border-radius: var(--radius); background: transparent; color: var(--text-muted); font: inherit; cursor: pointer; }
++.markdown .code-copy:hover { border-color: var(--accent); color: var(--accent); }
++.markdown .code-copy[data-state="copied"] { border-color: var(--success); color: var(--success); }
++.markdown .code-copy[data-state="failed"] { border-color: var(--danger); color: var(--danger); }
++.markdown pre { margin: 0; padding: .75rem .9rem; overflow-x: auto; white-space: pre; tab-size: 4; }
++.markdown pre code { padding: 0; border: 0; background: none; color: var(--text); font-size: .84rem; line-height: 1.55; overflow-wrap: normal; }
++
++.markdown blockquote { padding: .35em .9em; border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent-soft) 45%, transparent); color: var(--text-muted); }
++.markdown blockquote > :last-child { margin-bottom: 0; }
++.markdown hr { height: 2px; border: 0; background: var(--gradient); opacity: .75; }
++
++.markdown table { display: block; width: max-content; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
++.markdown :is(th, td) { padding: .4em .75em; border: 1px solid var(--border); text-align: left; vertical-align: top; }
++.markdown th { background: var(--surface-muted); color: var(--accent); font-weight: 700; }
++.markdown tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-muted) 55%, transparent); }
++.markdown img { max-width: 100%; height: auto; border: var(--border-width) solid var(--border); border-radius: var(--radius); }
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/app/src/styles/theme.css work/app/src/styles/theme.css
+--- upstream/app/src/styles/theme.css	2026-10-20 10:03:50.847427119 +0200
++++ work/app/src/styles/theme.css	2026-10-20 12:00:22.240588728 +0200
+@@ -1,7 +1,111 @@
+ @import "tailwindcss";
+ 
++/* Themes. data-palette picks the colors, data-theme picks light or dark (each Catppuccin flavor has one mode
++   only) and data-corners picks soft (rounded) or hard (square) corners. index.html sets all three before the first
++   paint from what Settings stored (lib/state/appearance.ts). The palette selectors are not tied to :root, so the
++   theme tiles in Settings carry their own palette as a preview. */
++
++/* Shared tokens and the aliases components use; declared on every palette element so they resolve per palette. */
+ :root,
+-:root[data-theme="light"] {
++[data-palette] {
++  --font-mono: "JetBrains Mono", "JetBrainsMono NF", "JetBrainsMono Nerd Font", "Cascadia Mono", "Cascadia Code", "SFMono-Regular", Consolas, ui-monospace, monospace;
++  --font-sans: "Karla Variable", "Segoe UI", system-ui, sans-serif;
++  --font-serif: var(--font-sans);
++  --body-font-size: 1rem;
++  --border-width: 1px;
++  --control-height: 2.125rem;
++  --motion-fast: 100ms cubic-bezier(.2, .8, .2, 1);
++  --accent-wash: color-mix(in srgb, var(--accent) 18%, var(--bg));
++  --text-on-accent: var(--bg);
++  --status-todo: var(--cyan);
++  --status-doing: var(--warning);
++  --status-done: var(--success);
++  --page: var(--bg);
++  --surface-0: var(--bg);
++  --surface-1: var(--bg-deep);
++  --surface: var(--surface-card);
++  --accent-soft: var(--accent-wash);
++  --hover-border: var(--accent);
++  --dialog-border: var(--border-strong);
++  --dialog-shadow: 0 18px 56px rgb(0 0 0 / .42);
++  --gradient: linear-gradient(90deg, var(--accent), var(--cyan));
++  --glow: 0 0 0 1px var(--accent);
++  --shadow: 0 1px 0 rgb(0 0 0 / .16);
++  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
++  --tour-scrim: rgb(0 0 0 / .62);
++}
++
++/* Corners: soft rounds every control, card and dialog; hard squares everything, pills and dots included. */
++:root { --radius: 8px; }
++:root[data-corners="hard"] { --radius: 0px; }
++:root[data-corners="hard"] *,
++:root[data-corners="hard"] *::before,
++:root[data-corners="hard"] *::after { border-radius: 0 !important; }
++
++/* Arcade: glowup's "arcade" pack, neon on deep purple. Dark is the pack itself (glowup's exact palette); light keeps
++   the same hues, darkened until every text color passes WCAG AA on its surfaces. */
++[data-palette="arcade"] {
++  color-scheme: dark;
++  --font-sans: var(--font-mono);
++  --font-serif: var(--font-mono);
++  --body-font-size: .92rem;
++  --border-width: 2px;
++  --bg: #1a0b33;
++  --bg-deep: #14082b;
++  --surface-card: #26124a;
++  --surface-muted: #13072a;
++  --surface-column: #1e0e3c;
++  --card-border: #4a2a85;
++  --text: #f0e6ff;
++  --text-muted: #9b86c9;
++  --accent: #ff3ec8;
++  --accent-strong: #ff7ad9;
++  --accent-wash: #3a1d6b;
++  --text-on-accent: #1a0b33;
++  --cyan: #38e8ff;
++  --agent: #b388ff;
++  --border: #4a2a85;
++  --border-strong: #7350b8;
++  --danger: #ff4d6d;
++  --warning: #ffd23e;
++  --success: #39ff88;
++  --dialog-border: var(--accent);
++  --dialog-shadow: var(--glow), 0 18px 56px rgb(8 2 20 / .4);
++  --gradient: linear-gradient(90deg, #ff3ec8, #38e8ff);
++  --glow: 0 0 0 1px var(--accent), 0 0 18px rgb(255 62 200 / .28);
++  --shadow: 0 2px 0 rgb(8 2 20 / .45);
++  --tour-scrim: rgb(8 2 20 / .66);
++}
++
++[data-palette="arcade"][data-theme="light"] {
++  color-scheme: light;
++  --bg: #f6f1ff;
++  --bg-deep: #ece3fd;
++  --surface-card: #ffffff;
++  --surface-muted: #f4eeff;
++  --surface-column: #efe7fe;
++  --card-border: #d9cbf5;
++  --text: #1a0b33;
++  --text-muted: #5d4a8a;
++  --accent: #c0108a;
++  --accent-strong: #8f0a66;
++  --accent-wash: #fde3f4;
++  --text-on-accent: #ffffff;
++  --cyan: #006a80;
++  --agent: #6b3fd4;
++  --border: #d9cbf5;
++  --border-strong: #9a80d6;
++  --danger: #c4123f;
++  --warning: #855800;
++  --success: #0a7339;
++  --gradient: linear-gradient(90deg, var(--accent), var(--cyan));
++  --glow: 0 0 0 1px var(--accent), 0 4px 14px rgb(192 16 138 / .18);
++  --shadow: 0 1px 0 rgb(26 11 51 / .06);
++  --tour-scrim: rgb(26 11 51 / .48);
++}
++
++/* Clean: sidequest's stock palette and fonts. */
++[data-palette="clean"] {
+   color-scheme: light;
+   --font-sans: "Karla Variable", "Segoe UI", sans-serif;
+   --font-serif: "Newsreader Variable", Georgia, serif;
+@@ -18,27 +122,24 @@
+   --accent-strong: #323f76;
+   --accent-wash: #e5e7ef;
+   --text-on-accent: #faf9f5;
++  --cyan: var(--accent);
++  --agent: var(--accent-strong);
+   --border: #cdcac0;
+   --border-strong: #8c9298;
+   --danger: #a84035;
+   --warning: #9a6900;
+   --success: #3f745c;
+   --status-todo: var(--accent);
+-  --status-doing: var(--warning);
+-  --status-done: var(--success);
+-  --page: var(--bg);
+-  --surface-0: var(--bg);
+-  --surface-1: var(--bg-deep);
+-  --surface: var(--surface-card);
+-  --accent-soft: var(--accent-wash);
+-  --radius: 3px;
+-  --control-height: 2.125rem;
++  --hover-border: var(--border-strong);
++  --dialog-shadow: 0 18px 56px rgb(12 16 22 / .28), 0 2px 8px rgb(12 16 22 / .16);
++  --gradient: linear-gradient(90deg, var(--border), var(--border));
++  --glow: 0 2px 4px rgb(24 28 34 / .09);
++  --shadow: 0 1px 2px rgb(24 28 34 / .06);
+   --focus-ring: 0 0 0 3px var(--accent-strong);
+   --tour-scrim: rgb(12 16 22 / .48);
+-  --motion-fast: 100ms cubic-bezier(.2, .8, .2, 1);
+ }
+ 
+-:root[data-theme="dark"] {
++[data-palette="clean"][data-theme="dark"] {
+   color-scheme: dark;
+   --bg: #171a1e;
+   --bg-deep: #1d2227;
+@@ -48,28 +149,145 @@
+   --card-border: #3c444c;
+   --text: #ece9e0;
+   --text-muted: #a8aca9;
+-  --accent: #9eaaFF;
+-  --accent-strong: #c3cafF;
++  --accent: #9eaaff;
++  --accent-strong: #c3caff;
+   --accent-wash: #2c3554;
+   --text-on-accent: #171a1e;
+   --border: #343b42;
+   --border-strong: #626b74;
+-  --tour-scrim: rgb(0 0 0 / .62);
+   --danger: #f08a79;
+   --warning: #e0af4e;
+   --success: #76b393;
+-  --status-todo: var(--accent);
+-  --status-doing: var(--warning);
+-  --status-done: var(--success);
+-  --page: var(--bg);
+-  --surface-0: var(--bg);
+-  --surface-1: var(--bg-deep);
+-  --surface: var(--surface-card);
+-  --accent-soft: var(--accent-wash);
+-  --radius: 3px;
+-  --control-height: 2.125rem;
+-  --focus-ring: 0 0 0 3px var(--accent-strong);
+-  --motion-fast: 100ms cubic-bezier(.2, .8, .2, 1);
++  --dialog-shadow: 0 18px 56px rgb(0 0 0 / .5), 0 2px 8px rgb(0 0 0 / .3);
++  --glow: 0 2px 6px rgb(0 0 0 / .3);
++  --shadow: 0 1px 2px rgb(0 0 0 / .25);
++  --tour-scrim: rgb(0 0 0 / .62);
++}
++
++/* Tokyo Night (folke/tokyonight "night"); light mode is its "day" variant, with the text colors darkened until
++   they pass WCAG AA on its surfaces. */
++[data-palette="tokyo-night"] {
++  color-scheme: dark;
++  --bg: #1a1b26;
++  --bg-deep: #16161e;
++  --surface-card: #24283b;
++  --surface-muted: #16161e;
++  --surface-column: #1f2335;
++  --card-border: #3b4261;
++  --text: #c0caf5;
++  --text-muted: #8a93c0;
++  --accent: #7aa2f7;
++  --accent-strong: #89ddff;
++  --accent-wash: #283457;
++  --cyan: #7dcfff;
++  --agent: #bb9af7;
++  --border: #3b4261;
++  --border-strong: #545c7e;
++  --danger: #f7768e;
++  --warning: #e0af68;
++  --success: #9ece6a;
++  --gradient: linear-gradient(90deg, #7aa2f7, #bb9af7);
++  --tour-scrim: rgb(10 11 18 / .66);
++}
++
++[data-palette="tokyo-night"][data-theme="light"] {
++  color-scheme: light;
++  --bg: #e1e2e7;
++  --bg-deep: #d0d5e3;
++  --surface-card: #eeeff3;
++  --surface-muted: #e9eaef;
++  --surface-column: #d6d8e2;
++  --card-border: #c4c8da;
++  --text: #2a4793;
++  --text-muted: #4d5b93;
++  --accent: #225cac;
++  --accent-strong: #1a4787;
++  --accent-wash: #d3ddf2;
++  --text-on-accent: #ffffff;
++  --cyan: #00677f;
++  --agent: #7445b7;
++  --border: #c4c8da;
++  --border-strong: #a1a6c5;
++  --danger: #a63838;
++  --warning: #745a33;
++  --success: #4d6632;
++  --gradient: linear-gradient(90deg, #2e7de9, #9854f1);
++  --dialog-shadow: 0 18px 56px rgb(30 40 80 / .24), 0 2px 8px rgb(30 40 80 / .12);
++  --shadow: 0 1px 2px rgb(30 40 80 / .08);
++  --tour-scrim: rgb(40 50 90 / .42);
++}
++
++/* Catppuccin flavors (catppuccin/palette). Each flavor sets the raw palette; one mapping turns it into tokens. */
++[data-palette="catppuccin-mocha"] {
++  color-scheme: dark;
++  --ctp-base: #1e1e2e; --ctp-mantle: #181825; --ctp-crust: #11111b;
++  --ctp-surface0: #313244; --ctp-surface1: #45475a; --ctp-overlay0: #6c7086;
++  --ctp-text: #cdd6f4; --ctp-subtext0: #a6adc8;
++  --ctp-mauve: #cba6f7; --ctp-pink: #f5c2e7; --ctp-lavender: #b4befe; --ctp-blue: #89b4fa;
++  --ctp-red: #f38ba8; --ctp-peach: #fab387; --ctp-yellow: #f9e2af; --ctp-green: #a6e3a1;
++}
++
++[data-palette="catppuccin-macchiato"] {
++  color-scheme: dark;
++  --ctp-base: #24273a; --ctp-mantle: #1e2030; --ctp-crust: #181926;
++  --ctp-surface0: #363a4f; --ctp-surface1: #494d64; --ctp-overlay0: #6e738d;
++  --ctp-text: #cad3f5; --ctp-subtext0: #a5adcb;
++  --ctp-mauve: #c6a0f6; --ctp-pink: #f5bde6; --ctp-lavender: #b7bdf8; --ctp-blue: #8aadf4;
++  --ctp-red: #ed8796; --ctp-peach: #f5a97f; --ctp-yellow: #eed49f; --ctp-green: #a6da95;
++}
++
++[data-palette="catppuccin-frappe"] {
++  color-scheme: dark;
++  --ctp-base: #303446; --ctp-mantle: #292c3c; --ctp-crust: #232634;
++  --ctp-surface0: #414559; --ctp-surface1: #51576d; --ctp-overlay0: #737994;
++  --ctp-text: #c6d0f5; --ctp-subtext0: #a5adce;
++  --ctp-mauve: #ca9ee6; --ctp-pink: #f4b8e4; --ctp-lavender: #babbf1; --ctp-blue: #8caaee;
++  --ctp-red: #e78284; --ctp-peach: #ef9f76; --ctp-yellow: #e5c890; --ctp-green: #a6d189;
++}
++
++[data-palette="catppuccin-latte"] {
++  color-scheme: light;
++  --ctp-base: #eff1f5; --ctp-mantle: #e6e9ef; --ctp-crust: #dce0e8;
++  --ctp-surface0: #ccd0da; --ctp-surface1: #bcc0cc; --ctp-overlay0: #9ca0b0;
++  --ctp-text: #4c4f69; --ctp-subtext0: #6c6f85;
++  --ctp-mauve: #8839ef; --ctp-pink: #ea76cb; --ctp-lavender: #7287fd; --ctp-blue: #1e66f5;
++  --ctp-red: #d20f39; --ctp-peach: #fe640b; --ctp-yellow: #df8e1d; --ctp-green: #40a02b;
++}
++
++[data-palette^="catppuccin-"] {
++  --bg: var(--ctp-base);
++  --bg-deep: var(--ctp-mantle);
++  --surface-card: var(--ctp-surface0);
++  --surface-muted: var(--ctp-crust);
++  --surface-column: var(--ctp-mantle);
++  --card-border: var(--ctp-surface1);
++  --text: var(--ctp-text);
++  --text-muted: var(--ctp-subtext0);
++  --accent: var(--ctp-mauve);
++  --accent-strong: var(--ctp-pink);
++  --text-on-accent: var(--ctp-crust);
++  --cyan: var(--ctp-blue);
++  --agent: var(--ctp-lavender);
++  --border: var(--ctp-surface1);
++  --border-strong: var(--ctp-overlay0);
++  --danger: var(--ctp-red);
++  --warning: var(--ctp-yellow);
++  --success: var(--ctp-green);
++  --gradient: linear-gradient(90deg, var(--ctp-mauve), var(--ctp-blue));
++  --tour-scrim: color-mix(in srgb, var(--ctp-crust) 70%, transparent);
++}
++
++/* Latte is light: cards sit lighter than the columns, and peach replaces yellow so "doing" stays readable. */
++[data-palette="catppuccin-latte"] {
++  --bg: var(--ctp-mantle);
++  --bg-deep: var(--ctp-crust);
++  --surface-card: var(--ctp-base);
++  --surface-muted: var(--ctp-mantle);
++  --surface-column: var(--ctp-crust);
++  --text-on-accent: var(--ctp-base);
++  --warning: var(--ctp-peach);
++  --dialog-shadow: 0 18px 56px rgb(76 79 105 / .24), 0 2px 8px rgb(76 79 105 / .12);
++  --shadow: 0 1px 2px rgb(76 79 105 / .08);
+ }
+ 
+ :focus-visible { outline: none; box-shadow: var(--focus-ring); }
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/test/appearance.test.ts work/test/appearance.test.ts
+--- upstream/test/appearance.test.ts	1970-01-01 01:00:00.000000000 +0100
++++ work/test/appearance.test.ts	2026-10-20 11:58:33.860345494 +0200
+@@ -0,0 +1,93 @@
++import { readFileSync } from 'node:fs';
++import { afterEach, describe, expect, it, vi } from 'vitest';
++import {
++  applyAppearance,
++  CORNERS_STORAGE_KEY,
++  DEFAULT_APPEARANCE,
++  effectiveMode,
++  MODE_STORAGE_KEY,
++  PALETTE_STORAGE_KEY,
++  PALETTES,
++  readAppearance,
++  writeAppearance,
++  type Appearance
++} from '../app/src/lib/state/appearance';
++
++function storage(initial: Record<string, string> = {}) {
++  const values = new Map(Object.entries(initial));
++  return {
++    getItem: vi.fn((key: string) => values.get(key) ?? null),
++    setItem: vi.fn((key: string, value: string) => { values.set(key, value); }),
++    removeItem: vi.fn((key: string) => { values.delete(key); })
++  };
++}
++
++// The pre-paint script in index.html, run against a stored choice; returns the attributes it set.
++function prePaint(stored: Record<string, string>) {
++  const html = readFileSync(new URL('../app/index.html', import.meta.url), 'utf8');
++  const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
++  if (!script) throw new Error('index.html has no inline pre-paint script');
++  const rootElement = { dataset: { palette: 'arcade', theme: 'dark', corners: 'hard' } as Record<string, string> };
++  new Function('localStorage', 'document', script)(storage(stored), { documentElement: rootElement });
++  return rootElement.dataset;
++}
++
++afterEach(() => vi.unstubAllGlobals());
++
++describe('appearance', () => {
++  it('defaults to dark arcade with hard corners when nothing is stored', () => {
++    vi.stubGlobal('localStorage', storage());
++    expect(readAppearance()).toEqual(DEFAULT_APPEARANCE);
++  });
++
++  it('round trips a choice through localStorage', () => {
++    const store = storage();
++    vi.stubGlobal('localStorage', store);
++    const appearance: Appearance = { palette: 'tokyo-night', mode: 'light', corners: 'soft' };
++    writeAppearance(appearance);
++    expect(store.setItem).toHaveBeenCalledWith(PALETTE_STORAGE_KEY, 'tokyo-night');
++    expect(readAppearance()).toEqual(appearance);
++  });
++
++  it('falls back to the default palette for an unknown stored id and keeps the light choice of older installs', () => {
++    vi.stubGlobal('localStorage', storage({ [PALETTE_STORAGE_KEY]: 'solarized', [MODE_STORAGE_KEY]: 'light' }));
++    expect(readAppearance()).toEqual({ palette: 'arcade', mode: 'light', corners: 'hard' });
++  });
++
++  it('survives a browser with throwing localStorage', () => {
++    const throwing = () => { throw new Error('blocked'); };
++    vi.stubGlobal('localStorage', { getItem: throwing, setItem: throwing, removeItem: throwing });
++    expect(readAppearance()).toEqual(DEFAULT_APPEARANCE);
++    expect(() => writeAppearance(DEFAULT_APPEARANCE)).not.toThrow();
++  });
++
++  it('shows each Catppuccin flavor in its own mode and the others in the chosen one', () => {
++    expect(effectiveMode('catppuccin-latte', 'dark')).toBe('light');
++    expect(effectiveMode('catppuccin-mocha', 'light')).toBe('dark');
++    expect(effectiveMode('catppuccin-frappe', 'light')).toBe('dark');
++    expect(effectiveMode('catppuccin-macchiato', 'light')).toBe('dark');
++    expect(effectiveMode('arcade', 'light')).toBe('light');
++    expect(effectiveMode('clean', 'dark')).toBe('dark');
++  });
++
++  it('writes palette, effective mode and corners onto the root element', () => {
++    const rootElement = { dataset: {} as DOMStringMap };
++    applyAppearance({ palette: 'catppuccin-latte', mode: 'dark', corners: 'soft' }, rootElement);
++    expect({ ...rootElement.dataset }).toEqual({ palette: 'catppuccin-latte', theme: 'light', corners: 'soft' });
++  });
++
++  it('pre-paints exactly what the app applies for every palette, mode and corner style', () => {
++    for (const palette of PALETTES) {
++      for (const mode of ['light', 'dark'] as const) {
++        for (const corners of ['soft', 'hard'] as const) {
++          const stored = { [PALETTE_STORAGE_KEY]: palette.id, [MODE_STORAGE_KEY]: mode, [CORNERS_STORAGE_KEY]: corners };
++          vi.stubGlobal('localStorage', storage(stored));
++          const applied = { dataset: {} as DOMStringMap };
++          applyAppearance(readAppearance(), applied);
++          expect(prePaint(stored)).toEqual({ ...applied.dataset });
++        }
++      }
++    }
++    expect(prePaint({ [PALETTE_STORAGE_KEY]: 'solarized' })).toEqual({ palette: 'arcade', theme: 'dark', corners: 'hard' });
++  });
++});
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/test/board-state.test.ts work/test/board-state.test.ts
+--- upstream/test/board-state.test.ts	2026-10-20 10:03:50.867427220 +0200
++++ work/test/board-state.test.ts	2026-10-20 13:24:22.805762226 +0200
+@@ -49,6 +49,24 @@
+     expect(state.visibleTickets.map((ticket) => ticket.id)).toEqual(['3']);
+   });
+ 
++  it('keeps the sessions search apart from the ticket search across views', () => {
++    const state = new BoardState();
++    state.applySnapshot(snapshot());
++
++    state.openSessions();
++    state.sessionSearch = 'sftp';
++    expect(state.search).toBe('');
++    expect(state.visibleTickets.map((ticket) => ticket.id)).toEqual(['1', '2', '3']);
++
++    state.selectProject('alpha');
++    expect(state.view).toBe('board');
++    state.search = 'urgent';
++    expect(state.visibleTickets.map((ticket) => ticket.id)).toEqual(['2']);
++
++    state.openSessions();
++    expect(state.sessionSearch).toBe('sftp');
++  });
++
+   it('holds a pending poll snapshot until a ticket mutation completes', async () => {
+     let finish: () => void = () => {};
+     const api = {
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/test/clawd.test.ts work/test/clawd.test.ts
+--- upstream/test/clawd.test.ts	1970-01-01 01:00:00.000000000 +0100
++++ work/test/clawd.test.ts	2026-10-20 12:31:17.563646934 +0200
+@@ -0,0 +1,66 @@
++import { readFileSync } from 'node:fs';
++import { describe, expect, it } from 'vitest';
++import {
++  CLAWD_BODY,
++  CLAWD_BODY_COLOR,
++  CLAWD_EYE_COLOR,
++  CLAWD_EYES,
++  CLAWD_HEIGHT,
++  CLAWD_WIDTH,
++  clawdPath,
++  drawClawd
++} from '../app/src/lib/components/shell/clawd';
++
++function recordingContext() {
++  const fills: { color: string; x: number; y: number; width: number; height: number }[] = [];
++  const context = {
++    fillStyle: '' as string | CanvasGradient | CanvasPattern,
++    fillRect(x: number, y: number, width: number, height: number) { fills.push({ color: String(context.fillStyle), x, y, width, height }); }
++  };
++  return { context, fills };
++}
++
++describe('clawd', () => {
++  it('keeps every pixel on the 16 × 10 grid, with the eyes inside the body', () => {
++    for (const [x, y, width, height] of [...CLAWD_BODY, ...CLAWD_EYES]) {
++      expect(x).toBeGreaterThanOrEqual(0);
++      expect(y).toBeGreaterThanOrEqual(0);
++      expect(x + width).toBeLessThanOrEqual(CLAWD_WIDTH);
++      expect(y + height).toBeLessThanOrEqual(CLAWD_HEIGHT);
++    }
++    const [bodyX, bodyY, bodyWidth, bodyHeight] = CLAWD_BODY[0];
++    for (const [x, y, width, height] of CLAWD_EYES) {
++      expect(x).toBeGreaterThanOrEqual(bodyX);
++      expect(y).toBeGreaterThanOrEqual(bodyY);
++      expect(x + width).toBeLessThanOrEqual(bodyX + bodyWidth);
++      expect(y + height).toBeLessThanOrEqual(bodyY + bodyHeight);
++    }
++  });
++
++  it('draws the same shape as the favicon', () => {
++    const favicon = readFileSync(new URL('../app/public/favicon.svg', import.meta.url), 'utf8');
++    expect(favicon).toContain(`<path fill="${CLAWD_BODY_COLOR}" d="${clawdPath(CLAWD_BODY)}"/>`);
++    expect(favicon).toContain(`<path fill="${CLAWD_EYE_COLOR}" d="${clawdPath(CLAWD_EYES)}"/>`);
++  });
++
++  it('centers Clawd on a canvas at a whole-number scale, body first and eyes on top', () => {
++    const { context, fills } = recordingContext();
++    drawClawd(context, 128);
++    expect(fills).toHaveLength(CLAWD_BODY.length + CLAWD_EYES.length);
++    expect(fills.slice(0, CLAWD_BODY.length).every((fill) => fill.color === CLAWD_BODY_COLOR)).toBe(true);
++    expect(fills.slice(CLAWD_BODY.length).every((fill) => fill.color === CLAWD_EYE_COLOR)).toBe(true);
++    const left = Math.min(...fills.map((fill) => fill.x));
++    const right = Math.max(...fills.map((fill) => fill.x + fill.width));
++    const top = Math.min(...fills.map((fill) => fill.y));
++    const bottom = Math.max(...fills.map((fill) => fill.y + fill.height));
++    expect([left, 128 - right]).toEqual([8, 8]);
++    expect([top, 128 - bottom]).toEqual([29, 29]);
++    expect(fills.every((fill) => Number.isInteger(fill.x) && Number.isInteger(fill.width))).toBe(true);
++  });
++
++  it('still draws at a scale of one on a tiny canvas', () => {
++    const { context, fills } = recordingContext();
++    drawClawd(context, 8);
++    expect(fills[0]).toMatchObject({ width: 12, height: 8 });
++  });
++});
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/test/markdown.test.ts work/test/markdown.test.ts
+--- upstream/test/markdown.test.ts	1970-01-01 01:00:00.000000000 +0100
++++ work/test/markdown.test.ts	2026-10-20 10:33:06.728470293 +0200
+@@ -0,0 +1,77 @@
++import { describe, expect, it } from 'vitest';
++import { renderMarkdown, safeHref } from '../app/src/lib/components/ticket/markdown';
++
++describe('ticket markdown', () => {
++	it('renders headings, nested lists, emphasis and inline code', () => {
++		const html = renderMarkdown('## Background\n- one with `code` and **bold**\n  - nested *item*\n\n1. first\n2. second\n\n### Third level');
++		expect(html).toContain('<h2>Background</h2>');
++		expect(html).toMatch(/<ul>\s*<li>one with <code>code<\/code> and <strong>bold<\/strong>\s*<ul>\s*<li>nested <em>item<\/em><\/li>/);
++		expect(html).toMatch(/<ol>\s*<li>first<\/li>\s*<li>second<\/li>\s*<\/ol>/);
++		expect(html).toContain('<h3>Third level</h3>');
++	});
++
++	it('wraps fenced code in a labelled block with a copy button and keeps its text escaped', () => {
++		const html = renderMarkdown("```bash\nls /datashare/sftp | head -3\necho \"<a home>\"\n```");
++		expect(html).toContain('<span class="code-lang">bash</span>');
++		expect(html).toContain('data-copy-code');
++		expect(html).toContain('<code class="language-bash">ls /datashare/sftp | head -3\necho &quot;&lt;a home&gt;&quot;</code>');
++	});
++
++	it('labels a code block without a language as text', () => {
++		expect(renderMarkdown('```\nplain\n```')).toContain('<span class="code-lang">text</span>');
++	});
++
++	it('renders GitHub tables, task lists, strikethrough, quotes and rules', () => {
++		const html = renderMarkdown('| a | b |\n|---|---|\n| 1 | 2 |\n\n- [x] done\n- [ ] open\n\n~~old~~\n\n> quoted\n\n---');
++		expect(html).toContain('<table>');
++		expect(html).toContain('<th>a</th>');
++		expect(html).toContain('<td>2</td>');
++		expect(html).toMatch(/<input checked="" disabled="" type="checkbox"[^>]*>/);
++		expect(html).toContain('<del>old</del>');
++		expect(html).toContain('<blockquote>');
++		expect(html).toContain('<hr>');
++	});
++
++	it('keeps single line breaks, like GitHub issues', () => {
++		expect(renderMarkdown('first line\nsecond line')).toBe('<p>first line<br>second line</p>\n');
++	});
++
++	it('shows source HTML blocks as text', () => {
++		const html = renderMarkdown('<script>alert(1)</script>\n\n<div onclick="x()">hi</div>');
++		expect(html).not.toContain('<script');
++		expect(html).not.toContain('<div');
++		expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
++	});
++
++	it('opens external links in a new tab and keeps relative links in place', () => {
++		expect(renderMarkdown('[docs](https://example.test/a?b=1&c=2)')).toContain('<a href="https://example.test/a?b=1&amp;c=2" target="_blank" rel="noopener noreferrer">docs</a>');
++		expect(renderMarkdown('[here](#notes)')).toContain('<a href="#notes">here</a>');
++		expect(renderMarkdown('see https://example.test')).toContain('<a href="https://example.test" target="_blank"');
++	});
++
++	it('drops unsafe link and image targets, keeping their text', () => {
++		const tabbed = renderMarkdown('[x](<java\tscript:alert(1)>)');
++		expect(tabbed).not.toContain('href');
++		expect(tabbed).toContain('x');
++		expect(renderMarkdown('[y](vbscript:msgbox)')).not.toContain('href');
++		const image = renderMarkdown('![shot](data:image/png;base64,AAAA)');
++		expect(image).not.toContain('<img');
++		expect(image).toContain('shot');
++		expect(renderMarkdown('![ok](https://example.test/a.png)')).toContain('<img src="https://example.test/a.png" alt="ok" loading="lazy">');
++	});
++
++	it('judges a link scheme the way a browser reads it', () => {
++		expect(safeHref('https://example.test')).toBe('https://example.test');
++		expect(safeHref('mailto:a@example.test')).toBe('mailto:a@example.test');
++		expect(safeHref('/api/x')).toBe('/api/x');
++		expect(safeHref('JaVaScRiPt:alert(1)')).toBeNull();
++		expect(safeHref(' \u0001javascript:alert(1)')).toBeNull();
++		expect(safeHref('java\nscript:alert(1)')).toBeNull();
++		expect(safeHref('')).toBeNull();
++	});
++
++	it('renders nothing for an empty description', () => {
++		expect(renderMarkdown(undefined)).toBe('');
++		expect(renderMarkdown('')).toBe('');
++	});
++});
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/test/sessions-model.test.ts work/test/sessions-model.test.ts
+--- upstream/test/sessions-model.test.ts	1970-01-01 01:00:00.000000000 +0100
++++ work/test/sessions-model.test.ts	2026-10-20 12:09:21.201935691 +0200
+@@ -0,0 +1,83 @@
++import { describe, expect, it, vi } from 'vitest';
++import { currentMilestone, duration, filterSessions, forYou, loadIndex, loadMarkdown, markdownByPath, projectLabel, relativeTime, requestTitle, standing, stepsOf, type SessionRequest, type SessionSummary } from '../app/src/lib/sessions/model';
++
++const request = (over: Partial<SessionRequest> = {}): SessionRequest => ({
++  id: 'r1-0', n: 1, text: 'fix the login bug\nin auth.ts', status: 'completed', at: 0, turns: [{ answer: 'Done.', reason: 'answer', durationMs: 65_000, endedAt: 1 }],
++  files: [], commands: [], commandCount: 0, commits: 0, agents: [], tasks: [], tools: 3, milestones: [], asked: [], ...over
++});
++const summary = (over: Partial<SessionSummary> = {}): SessionSummary => ({
++  id: '1fec4bcb-0626-49c1-82ba-edcf59ffec3b', name: 'Glowup plugin task list retrieval', project: '-mnt-c-Users-me-Keys', cwd: '/mnt/c/Users/me/Keys', branch: 'main',
++  startedAt: 0, updatedAt: 0, live: false, requests: 3, done: 2, working: 1, lastPrompt: 'add a context tab', markdown: 0, from: 'transcript', ...over
++});
++
++describe('sessions model', () => {
++  it('words a duration and a time ago as glowup does', () => {
++    expect([duration(4_000), duration(65_000), duration(3_725_000)]).toEqual(['4s', '1m 05s', '1h 02m']);
++    expect(relativeTime(0)).toBe('');
++    expect(relativeTime(1_000_000, 1_010_000)).toBe('just now');
++    expect(relativeTime(1_000_000, 1_000_000 + 5 * 60_000)).toBe('5 min ago');
++    expect(relativeTime(1_000_000, 1_000_000 + 3 * 3_600_000)).toBe('3 h ago');
++  });
++
++  it('shows the milestones Claude reported, else the tasks, and finds the one at work', () => {
++    const ms = [{ title: 'Build', status: 'completed' as const }, { title: 'Sign', status: 'blocked' as const, blocker: 'needs the key' }, { title: 'Ship', status: 'in_progress' as const, doing: 'uploading' }];
++    expect(currentMilestone(ms)).toBe(2);
++    expect(currentMilestone([{ title: 'a', status: 'completed' }])).toBe(-1);
++    expect(stepsOf(request({ milestones: ms }))).toEqual({ steps: ms, fromTasks: false });
++    expect(stepsOf(request({ tasks: [{ id: '1', title: 'T', status: 'completed' }] }))).toEqual({ steps: [{ title: 'T', status: 'completed' }], fromTasks: true });
++    expect(standing(request({ milestones: ms, status: 'in_progress' }))).toBe('working · 1m 05s · milestone 3 of 3');
++    expect(standing(request({ milestones: [ms[0]] }))).toBe('done · 1m 05s · 1 of 1 milestones done');
++    expect(standing(request())).toBe('done · 1m 05s');
++    // a running turn counts from when it started
++    expect(standing(request({ status: 'in_progress', runningSince: 1_000 }), [], 31_000)).toBe('working · 1m 35s');
++    expect(standing(request({ status: 'completed', runningSince: 1_000 }), [], 31_000)).toBe('done · 1m 05s');
++  });
++
++  it('a prompt taken into another request\'s turn shows that turn\'s milestones, naming it', () => {
++    const ms = [{ title: 'Gather', status: 'completed' as const }, { title: 'Sign', status: 'blocked' as const, blocker: 'needs the key' }];
++    const host = request({ id: 'r1-0', milestones: ms }), folded = request({ id: 'r2-1', n: 2, foldedInto: 'r1-0' }), all = [host, folded];
++    expect(stepsOf(folded, all)).toEqual({ steps: ms, fromTasks: false, from: host });
++    expect(standing(folded, all)).toBe('done · 1m 05s · milestone 2 of 2');
++    expect(forYou(folded, all).actions).toEqual(['Sign — needs the key']);
++    // without the list, or with tasks of its own, it keeps its own
++    expect(stepsOf(folded).steps).toEqual([]);
++    expect(stepsOf(request({ foldedInto: 'r1-0', tasks: [{ id: '1', title: 'T', status: 'pending' }] }), all)).toEqual({ steps: [{ title: 'T', status: 'pending' }], fromTasks: true });
++  });
++
++  it('collects what is left to the person: asked questions, open questions, blocked milestones and steps', () => {
++    const you = forYou(request({
++      milestones: [{ title: 'Sign', status: 'blocked', blocker: 'needs the key' }],
++      asked: [{ question: 'Which folder?', answer: '~/mods' }],
++      followUps: { questions: ['Publish it?'], actions: ['Restart Claude Code'] }
++    }));
++    expect(you).toEqual({ asked: [{ question: 'Which folder?', answer: '~/mods' }], questions: ['Publish it?'], actions: ['Sign — needs the key', 'Restart Claude Code'], empty: false });
++    expect(forYou(request()).empty).toBe(true);
++  });
++
++  it('titles, projects and search', () => {
++    expect(requestTitle({ text: '\n  fix   the bug\nmore' })).toBe('fix the bug');
++    expect(projectLabel(summary())).toBe('me / Keys');
++    expect(projectLabel(summary({ cwd: '' }))).toBe('me / Keys');
++    const list = [summary(), summary({ id: 'x', name: 'SFTP migration', lastPrompt: 'move files', cwd: '/srv/api' })];
++    expect(filterSessions(list, '').length).toBe(2);
++    expect(filterSessions(list, 'sftp').map((s) => s.id)).toEqual(['x']);
++    expect(filterSessions(list, 'context TAB').map((s) => s.name)).toEqual(['Glowup plugin task list retrieval']);
++    expect(filterSessions(list, '1fec4bcb').length).toBe(1);
++    expect(filterSessions(list, 'nothing here').length).toBe(0);
++  });
++
++  it('links only markdown files that are still there', () => {
++    const map = markdownByPath({ markdown: [{ path: '/a/README.md', name: 'README.md', request: 1, exists: true, href: 'sessions-data/files/abc.md' }, { path: '/a/gone.md', name: 'gone.md', request: 2, exists: false }] });
++    expect([...map.keys()]).toEqual(['/a/README.md']);
++  });
++
++  it('reads the data under /sessions-data, uncached, and refuses other paths', async () => {
++    const fetcher = vi.fn(async (url: string) => new Response(url.endsWith('index.json') ? '{"format":1,"generatedAt":5,"sessions":[]}' : '# hi', { status: 200 }));
++    expect(await loadIndex(fetcher as unknown as typeof fetch)).toEqual({ format: 1, generatedAt: 5, sessions: [] });
++    expect(fetcher).toHaveBeenCalledWith('/sessions-data/index.json', { cache: 'no-store' });
++    expect(await loadMarkdown('sessions-data/files/abc.md', fetcher as unknown as typeof fetch)).toBe('# hi');
++    await expect(loadMarkdown('../../etc/passwd', fetcher as unknown as typeof fetch)).rejects.toThrow('not a session file');
++    const missing = vi.fn(async () => new Response('', { status: 404 }));
++    await expect(loadIndex(missing as unknown as typeof fetch)).rejects.toThrow('not built yet');
++  });
++});
+diff -ruN -x node_modules -x dist -x package.json -x package-lock.json upstream/test/ticket-dialog.test.ts work/test/ticket-dialog.test.ts
+--- upstream/test/ticket-dialog.test.ts	2026-10-20 10:03:50.867427220 +0200
++++ work/test/ticket-dialog.test.ts	2026-10-20 16:05:05.690507678 +0200
+@@ -27,6 +27,29 @@
+ 		expect(requests[3].url).toContain('/link/SQ-2?project=demo');
+ 	});
+ 
++	it('edits a comment through PATCH on the comment id', async () => {
++		const fetcher = vi.fn((input: RequestInfo | URL, init?: RequestInit) => response({ ok: true, input: String(input), init }));
++		const state = new BoardState(new ApiClient(fetcher));
++
++		await state.editComment(ticket, 'c_abc', 'Fixed note');
++
++		const [input, init] = fetcher.mock.calls[0];
++		expect(String(input)).toContain('/api/tickets/t-1/comment/c_abc?project=demo');
++		expect(init?.method).toBe('PATCH');
++		expect(String(init?.body)).toContain('"body":"Fixed note"');
++	});
++
++	it('deletes a comment through DELETE on the comment id', async () => {
++		const fetcher = vi.fn(() => response({ ok: true }));
++		const state = new BoardState(new ApiClient(fetcher));
++
++		await state.deleteComment(ticket, 'c_abc');
++
++		const [input, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
++		expect(String(input)).toContain('/api/tickets/t-1/comment/c_abc?project=demo');
++		expect(init.method).toBe('DELETE');
++	});
++
+ 	it('escapes source HTML and rejects unsafe markdown links', () => {
+ 		const html = renderMarkdown('<img src=x onerror=alert(1)> [bad](javascript:alert(1)) [safe](https://example.test)');
+ 		expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');

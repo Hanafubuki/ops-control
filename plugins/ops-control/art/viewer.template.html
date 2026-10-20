@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__PET__ Sprites</title>
+<style>
+  :root { --bg:#0f0f13; --card:#17171d; --line:#2a2a33; --fg:#d8d8e0; --dim:#8a8a98; --acc:#d77757; --stage:#1a1a20; color-scheme:dark; }
+  /* a light terminal theme, for checking the sprite's contrast */
+  body.light { --stage:#f6f5f0; }
+  * { box-sizing: border-box; }
+  [hidden] { display:none !important; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:13px/1.4 ui-monospace, "JetBrains Mono", Menlo, monospace; }
+  header { position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; gap:16px; align-items:center;
+           padding:12px 16px; background:#121217ee; border-bottom:1px solid var(--line); }
+  h1 { font-size:14px; margin:0 12px 0 0; color:var(--acc); }
+  fieldset { border:0; margin:0; padding:0; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  legend { float:left; color:var(--dim); margin-right:6px; }
+  button { background:#202028; color:var(--fg); border:1px solid var(--line); border-radius:4px; padding:4px 9px;
+           font:inherit; cursor:pointer; }
+  button[aria-pressed="true"] { background:var(--acc); color:#1b1214; border-color:var(--acc); }
+  main { padding:16px; display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:6px; padding:12px; max-width:100%; overflow-x:auto; }
+  .card h2 { margin:0 0 8px; font-size:13px; display:flex; justify-content:space-between; gap:16px; }
+  .card h2 span { color:var(--dim); font-weight:normal; }
+  .stage { background:var(--stage); border-radius:3px; overflow:hidden; }
+  .sprite { display:grid; }
+  .sprite i { display:block; }
+  .ctl { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; align-items:center; }
+  .ctl output { color:var(--dim); margin-left:6px; }
+  .wide { flex-basis:100%; }
+  .strip { position:relative; background:var(--stage); border-radius:3px; overflow:hidden; }
+  .strip .sprite { position:absolute; top:0; }
+  .strip .ground { position:absolute; left:0; right:0; bottom:0; border-top:1px dashed #2a2a33; }
+  .labels { display:flex; flex-wrap:wrap; gap:18px; margin:0 0 8px; }
+  .labels b { color:var(--acc); font-weight:normal; }
+  .labels .dim { color:var(--dim); }
+  p.note { color:var(--dim); margin:8px 0 0; max-width:90ch; }
+</style>
+</head>
+<body>
+<header>
+  <h1>__PET__ sprites</h1>
+  <fieldset id="scale"><legend>size</legend>
+    <button data-s="1" aria-pressed="true">real</button><button data-s="2">2x</button><button data-s="4">4x</button></fieldset>
+  <fieldset id="look"><legend>look</legend><button id="shiny">shiny</button><button id="light">light bg</button><button id="reduced">reduced motion</button></fieldset>
+  <fieldset id="outfits"><legend>outfits</legend></fieldset>
+</header>
+<main id="main"></main>
+<script id="sprites" type="application/json">__SPRITES__</script>
+<script>
+const S = { shiny: {}, transitions: {}, outfits: {}, ...JSON.parse(document.getElementById('sprites').textContent) };
+const CELL_W = 8, CELL_H = 16;            // a real terminal cell; each half-block pixel is 8x8
+const PAD = 4;                            // extra pixel rows above the canvas when an outfit is worn
+const COLS = Math.max(48, S.w * 2);       // pane width the host walks the pet across
+const state = { scale: 1, shiny: false, reduced: matchMedia('(prefers-reduced-motion: reduce)').matches, outfits: new Set() };
+
+function color(ch) {
+  if (ch === '.' || ch === undefined) return 'transparent';
+  if (state.shiny && S.shiny[ch]) return S.shiny[ch];
+  return S.palette[ch];
+}
+
+// Frame + worn outfits. Head items anchor to frame.head; held items to frame.hand,
+// which defaults to 4 px below the head (in front of the belly).
+function compose(frame) {
+  const pad = state.outfits.size ? PAD : 0;
+  const g = [];
+  for (let y = 0; y < pad; y++) g.push(Array(S.w).fill('.'));
+  for (const row of frame.px) g.push([...row]);
+  for (const name of state.outfits) {
+    const o = S.outfits[name];
+    const at = o.slot === 'hand' ? (frame.hand || [frame.head[0], frame.head[1] + 4]) : frame.head;
+    const ox = at[0] - o.anchor[0], oy = at[1] - o.anchor[1] + pad;
+    o.px.forEach((row, j) => [...row].forEach((c, k) => {
+      const x = ox + k, y = oy + j;
+      if (c !== '.' && y >= 0 && y < g.length && x >= 0 && x < S.w) g[y][x] = c;
+    }));
+  }
+  return g;
+}
+
+function makeSprite() {
+  const el = document.createElement('div');
+  el.className = 'sprite';
+  return el;
+}
+
+// One <i> per terminal cell; top/bottom pixel via a hard-stop gradient, no glyphs.
+function paint(el, grid) {
+  const rows = Math.ceil(grid.length / 2), cw = CELL_W * state.scale, ch = CELL_H * state.scale;
+  el.style.gridTemplateColumns = `repeat(${S.w}, ${cw}px)`;
+  el.style.gridAutoRows = `${ch}px`;
+  const n = rows * S.w;
+  while (el.children.length < n) el.appendChild(document.createElement('i'));
+  while (el.children.length > n) el.lastChild.remove();
+  for (let r = 0; r < rows; r++) for (let x = 0; x < S.w; x++) {
+    const t = color(grid[r * 2][x]), b = color(grid[r * 2 + 1]?.[x]);
+    el.children[r * S.w + x].style.background = `linear-gradient(${t} 50%, ${b} 50%)`;
+  }
+}
+
+const players = [];
+const main = document.getElementById('main');
+
+function card(name, anim, sub) {
+  const c = document.createElement('section');
+  c.className = 'card';
+  c.innerHTML = `<h2>${name}<span>${sub}</span></h2>
+    <div class="stage"></div>
+    <div class="ctl"><button data-a="prev">◀</button><button data-a="play">pause</button><button data-a="next">▶</button><output></output></div>`;
+  const sp = makeSprite();
+  c.querySelector('.stage').appendChild(sp);
+  const out = c.querySelector('output'), playBtn = c.querySelector('[data-a=play]');
+  const p = { f: 0, playing: true, t: 0,
+    draw() {
+      const fr = anim.frames[this.f];
+      paint(sp, compose(fr));
+      out.textContent = `${this.f + 1}/${anim.frames.length} · ${fr.ms}ms${fr.dx !== undefined ? ' · dx ' + fr.dx : ''}${fr.exit ? ' · exit' : ''}`;
+    },
+    step(d) { this.f = (this.f + d + anim.frames.length) % anim.frames.length; this.t = 0; this.draw(); },
+    tick(dt) {
+      if (!this.playing || state.reduced) return;
+      this.t += dt;
+      const fr = anim.frames[this.f];
+      if (this.t < fr.ms) return;
+      this.t -= fr.ms;
+      if (this.f === anim.frames.length - 1 && !anim.loop) this.t = -900;  // hold the last frame, then replay
+      this.f = (this.f + 1) % anim.frames.length;
+      this.draw();
+    } };
+  const pause = () => { p.playing = false; playBtn.textContent = 'play'; };
+  c.querySelector('[data-a=prev]').onclick = () => { pause(); p.step(-1); };
+  c.querySelector('[data-a=next]').onclick = () => { pause(); p.step(1); };
+  playBtn.onclick = () => { p.playing = !p.playing; playBtn.textContent = p.playing ? 'pause' : 'play'; };
+  players.push(p);
+  return c;
+}
+
+// The pose rules the mod follows:
+// - every animation and transition starts at frame 0;
+// - a pose change waits for the next frame marked exit (at most 300 ms), except alert, which cuts in;
+// - leaving walk plays stop, leaving sleep plays wake-up; entering sleep plays lie-down, entering alert plays startle
+//   (each only when the sheet has that transition);
+// - x carries over between poses; walk turns into walk-left at the pane edge, or is mirrored when the sheet has
+//   no walk-left.
+const EXIT_CLIP = { walk: 'stop', 'walk-left': 'stop-left', sleep: 'wake-up' };
+const ENTRY_CLIP = { sleep: 'lie-down', alert: 'startle' };
+const MAX_WAIT = 300;
+const GAITS = ['walk', 'pant-walk'];
+
+function stateMachine() {
+  const c = document.createElement('section');
+  c.className = 'card wide';
+  c.innerHTML = `<h2>Transitions<span>a scripted session on a ${COLS}-column pane</span></h2>
+    <div class="labels"><span>now <b data-l="now"></b></span><span>next <b data-l="next"></b></span>
+      <span class="dim" data-l="event"></span></div>
+    <div class="strip"><div class="ground"></div></div>
+    <div class="ctl"><button data-a="script" aria-pressed="true">script</button><span class="dim">poses:</span></div>
+    <p class="note">Each pose starts at frame 0. A change waits for the next exit frame (at most 300 ms); alert cuts in at once.
+      ${Object.keys(S.transitions).length ? 'Leaving walk plays stop, leaving sleep plays wake-up, entering sleep plays lie-down, entering alert plays startle.'
+        : 'Walking left mirrors the right-facing walk.'}</p>`;
+  const strip = c.querySelector('.strip'), sp = makeSprite();
+  strip.appendChild(sp);
+  const L = n => c.querySelector(`[data-l=${n}]`);
+  const ctl = c.querySelector('.ctl'), scriptBtn = c.querySelector('[data-a=script]');
+
+  const m = {
+    pose: 'idle', track: null, f: 0, t: 0, x: 12, dir: 1,
+    plan: [], target: null, waited: 0, script: true, si: 0, st: 0,
+    play(kind, name) {
+      const src = kind === 'anim' ? S.animations[name] : S.transitions[name];
+      this.track = { kind, name, src };
+      this.f = 0; this.t = 0;
+      if (kind === 'anim') this.pose = name;
+      this.applyDx();
+    },
+    gait: 'walk',
+    walkName() { return this.dir > 0 || !S.animations[this.gait + '-left'] ? this.gait : this.gait + '-left'; },
+    mirrored() { return this.dir < 0 && this.track.kind === 'anim' && GAITS.includes(this.track.name); },
+    request(target) {
+      if (GAITS.includes(target)) { this.gait = target; target = this.walkName(); }
+      if (target === this.pose && this.track.kind === 'anim' && !this.plan.length) { this.target = null; return; }
+      this.target = target; this.waited = 0;
+      if (target === 'alert') this.start();
+    },
+    start() {
+      const from = this.track.kind === 'anim' ? this.pose : this.track.src.to;
+      const to = this.target;
+      this.target = null;
+      if (to === from) return;
+      const plan = [];
+      if (S.transitions[EXIT_CLIP[from]] && to !== 'alert') plan.push(['trans', EXIT_CLIP[from]]);
+      if (S.transitions[ENTRY_CLIP[to]]) plan.push(['trans', ENTRY_CLIP[to]]);
+      plan.push(['anim', to]);
+      const [k, n] = plan.shift();
+      this.plan = plan;
+      this.play(k, n);
+    },
+    atExit() {
+      const fr = this.track.src.frames[this.f];
+      const last = this.f === this.track.src.frames.length - 1;
+      return fr.exit || (this.track.kind === 'anim' && !this.track.src.loop && last);
+    },
+    applyDx() {
+      const dx = this.track.src.frames[this.f].dx || 0;
+      if (!dx) return;
+      this.x += this.mirrored() ? -dx : dx;
+      // Turn at the pane edge: swap to the other walk set at the same step of the cycle.
+      if (this.x >= COLS - S.w || this.x <= 0) {
+        this.x = Math.max(0, Math.min(COLS - S.w, this.x));
+        this.dir = -this.dir;
+        const name = this.walkName();
+        this.track = { kind: 'anim', name, src: S.animations[name] };
+        this.pose = name;
+      }
+    },
+    advance() {
+      const frames = this.track.src.frames, last = this.f === frames.length - 1;
+      if (last && this.track.kind === 'trans') {
+        const [k, n] = this.plan.shift() || ['anim', this.track.src.to];
+        this.play(k, n);
+        return;
+      }
+      if (last && !this.track.src.loop) return;            // once: hold the final frame
+      this.f = (this.f + 1) % frames.length;
+      this.applyDx();
+    },
+    tick(dt) {
+      if (state.reduced) return;
+      if (this.script) this.runScript(dt);
+      if (this.target && this.track.kind === 'anim') this.waited += dt;
+      this.t += dt;
+      const fr = this.track.src.frames[this.f];
+      if (this.t < fr.ms) return;
+      this.t -= fr.ms;
+      this.advance();
+      if (this.target && this.track.kind === 'anim' && (this.atExit() || this.waited >= MAX_WAIT)) this.start();
+      this.draw();
+    },
+    runScript(dt) {
+      this.st += dt;
+      const [wait, target, why] = SCRIPT[this.si];
+      if (this.st < wait) return;
+      this.st = 0;
+      this.si = (this.si + 1) % SCRIPT.length;
+      L('event').textContent = why;
+      this.request(target);
+    },
+    draw() {
+      const fr = this.track.src.frames[this.f], g = compose(fr);
+      if (this.mirrored()) g.forEach(r => r.reverse());
+      paint(sp, g);
+      strip.style.width = COLS * CELL_W * state.scale + 'px';
+      strip.style.height = Math.ceil(g.length / 2) * CELL_H * state.scale + 'px';
+      sp.style.left = this.x * CELL_W * state.scale + 'px';
+      L('now').textContent = this.track.kind === 'trans' ? `${this.track.name} → ${this.track.src.to}` : this.pose;
+      const queued = this.target || (this.plan.length ? this.plan.map(p => p[1]).join(' → ') : '');
+      L('next').textContent = queued ? queued + (this.target ? ' (waiting for an exit frame)' : '') : '—';
+    } };
+
+  const SCRIPT = [
+    [2600, 'alert', 'permission prompt'],
+    [2000, 'working', 'long tool run'],
+    [3400, 'walk', 'tool run over; wandering'],
+    [3600, 'idle', 'stops'],
+    [1800, 'hop', 'tests pass'],
+    [1500, 'done', 'task complete'],
+    [2600, 'idle', ''],
+    [1600, 'sleep', 'no input for a while'],
+    [5400, 'idle', 'user is back'],
+  ];
+
+  for (const name of ['idle', 'walk', 'hop', 'alert', 'done', 'sleep', 'working', 'fail',
+                          'juggle', 'pant', 'pant-walk', 'scrunch', 'idle2', 'idle3']) {
+    const b = document.createElement('button');
+    b.textContent = name;
+    b.onclick = () => { setScript(false); L('event').textContent = 'manual'; m.request(name); };
+    ctl.appendChild(b);
+  }
+  function setScript(on) { m.script = on; m.st = 0; scriptBtn.setAttribute('aria-pressed', on); }
+  scriptBtn.onclick = () => setScript(!m.script);
+
+  m.play('anim', 'idle');
+  players.push(m);
+  return c;
+}
+
+main.appendChild(stateMachine());
+for (const [name, anim] of Object.entries(S.animations))
+  main.appendChild(card(name, anim, `${anim.frames.length} frames · ${anim.loop ? 'loop' : 'once'}`));
+for (const [name, t] of Object.entries(S.transitions))
+  main.appendChild(card(name, t, `${t.frames.length} frames · ${t.from} → ${t.to}`));
+
+const ofs = document.getElementById('outfits');
+ofs.hidden = !Object.keys(S.outfits).length;
+for (const name of Object.keys(S.outfits)) {
+  const b = document.createElement('button');
+  b.textContent = name;
+  b.onclick = () => { state.outfits.has(name) ? state.outfits.delete(name) : state.outfits.add(name);
+    b.setAttribute('aria-pressed', state.outfits.has(name)); redraw(); };
+  ofs.appendChild(b);
+}
+document.querySelectorAll('#scale button').forEach(b => b.onclick = () => {
+  state.scale = +b.dataset.s;
+  document.querySelectorAll('#scale button').forEach(o => o.setAttribute('aria-pressed', o === b));
+  redraw();
+});
+const shinyBtn = document.getElementById('shiny'), redBtn = document.getElementById('reduced');
+shinyBtn.hidden = !Object.keys(S.shiny).length;
+shinyBtn.onclick = () => { state.shiny = !state.shiny; shinyBtn.setAttribute('aria-pressed', state.shiny); redraw(); };
+const lightBtn = document.getElementById('light');
+lightBtn.onclick = () => lightBtn.setAttribute('aria-pressed', document.body.classList.toggle('light'));
+redBtn.setAttribute('aria-pressed', state.reduced);
+redBtn.onclick = () => { state.reduced = !state.reduced; redBtn.setAttribute('aria-pressed', state.reduced); redraw(); };
+
+// Contact sheet: every frame of every animation and transition side by side, for reviewing the art.
+const sheet = document.createElement('main');
+sheet.hidden = true;
+main.after(sheet);
+const sheetBtn = document.createElement('button');
+sheetBtn.textContent = 'contact sheet';
+document.getElementById('look').appendChild(sheetBtn);
+sheetBtn.onclick = () => {
+  sheet.hidden = !sheet.hidden; main.hidden = !sheet.hidden;
+  sheetBtn.setAttribute('aria-pressed', !sheet.hidden); redraw();
+};
+function drawSheet() {
+  sheet.innerHTML = '';
+  for (const [name, anim] of [...Object.entries(S.animations), ...Object.entries(S.transitions)]) {
+    const c = document.createElement('section');
+    c.className = 'card wide';
+    c.innerHTML = `<h2>${name}</h2><div style="display:flex;flex-wrap:wrap;gap:6px"></div>`;
+    anim.frames.forEach((fr, n) => {
+      const box = document.createElement('div'), sp = makeSprite();
+      box.className = 'stage';
+      box.title = `${n + 1} · ${fr.ms}ms${fr.exit ? ' · exit' : ''}`;
+      if (fr.exit) box.style.outline = '1px solid #4eba65';
+      box.appendChild(sp); paint(sp, compose(fr));
+      c.lastChild.appendChild(box);
+    });
+    sheet.appendChild(c);
+  }
+}
+
+function redraw() { players.forEach(p => p.draw()); if (!sheet.hidden) drawSheet(); }
+redraw();
+let last = performance.now();
+(function loop(now) { const dt = Math.min(now - last, 250); last = now; players.forEach(p => p.tick(dt)); requestAnimationFrame(loop); })(last);
+</script>
+</body>
+</html>

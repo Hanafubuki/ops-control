@@ -1,0 +1,298 @@
+@import "tailwindcss";
+
+/* Themes. data-palette picks the colors, data-theme picks light or dark (each Catppuccin flavor has one mode
+   only) and data-corners picks soft (rounded) or hard (square) corners. index.html sets all three before the first
+   paint from what Settings stored (lib/state/appearance.ts). The palette selectors are not tied to :root, so the
+   theme tiles in Settings carry their own palette as a preview. */
+
+/* Shared tokens and the aliases components use; declared on every palette element so they resolve per palette. */
+:root,
+[data-palette] {
+  --font-mono: "JetBrains Mono", "JetBrainsMono NF", "JetBrainsMono Nerd Font", "Cascadia Mono", "Cascadia Code", "SFMono-Regular", Consolas, ui-monospace, monospace;
+  --font-sans: "Karla Variable", "Segoe UI", system-ui, sans-serif;
+  --font-serif: var(--font-sans);
+  --body-font-size: 1rem;
+  --border-width: 1px;
+  --control-height: 2.125rem;
+  --motion-fast: 100ms cubic-bezier(.2, .8, .2, 1);
+  --accent-wash: color-mix(in srgb, var(--accent) 18%, var(--bg));
+  --text-on-accent: var(--bg);
+  --status-todo: var(--cyan);
+  --status-doing: var(--warning);
+  --status-done: var(--success);
+  --page: var(--bg);
+  --surface-0: var(--bg);
+  --surface-1: var(--bg-deep);
+  --surface: var(--surface-card);
+  --accent-soft: var(--accent-wash);
+  --hover-border: var(--accent);
+  --dialog-border: var(--border-strong);
+  --dialog-shadow: 0 18px 56px rgb(0 0 0 / .42);
+  --gradient: linear-gradient(90deg, var(--accent), var(--cyan));
+  --glow: 0 0 0 1px var(--accent);
+  --shadow: 0 1px 0 rgb(0 0 0 / .16);
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  --tour-scrim: rgb(0 0 0 / .62);
+}
+
+/* Corners: soft rounds every control, card and dialog; hard squares everything, pills and dots included. */
+:root { --radius: 8px; }
+:root[data-corners="hard"] { --radius: 0px; }
+:root[data-corners="hard"] *,
+:root[data-corners="hard"] *::before,
+:root[data-corners="hard"] *::after { border-radius: 0 !important; }
+
+/* Arcade: glowup's "arcade" pack, neon on deep purple. Dark is the pack itself (glowup's exact palette); light keeps
+   the same hues, darkened until every text color passes WCAG AA on its surfaces. */
+[data-palette="arcade"] {
+  color-scheme: dark;
+  --font-sans: var(--font-mono);
+  --font-serif: var(--font-mono);
+  --body-font-size: .92rem;
+  --border-width: 2px;
+  --bg: #1a0b33;
+  --bg-deep: #14082b;
+  --surface-card: #26124a;
+  --surface-muted: #13072a;
+  --surface-column: #1e0e3c;
+  --card-border: #4a2a85;
+  --text: #f0e6ff;
+  --text-muted: #9b86c9;
+  --accent: #ff3ec8;
+  --accent-strong: #ff7ad9;
+  --accent-wash: #3a1d6b;
+  --text-on-accent: #1a0b33;
+  --cyan: #38e8ff;
+  --agent: #b388ff;
+  --border: #4a2a85;
+  --border-strong: #7350b8;
+  --danger: #ff4d6d;
+  --warning: #ffd23e;
+  --success: #39ff88;
+  --dialog-border: var(--accent);
+  --dialog-shadow: var(--glow), 0 18px 56px rgb(8 2 20 / .4);
+  --gradient: linear-gradient(90deg, #ff3ec8, #38e8ff);
+  --glow: 0 0 0 1px var(--accent), 0 0 18px rgb(255 62 200 / .28);
+  --shadow: 0 2px 0 rgb(8 2 20 / .45);
+  --tour-scrim: rgb(8 2 20 / .66);
+}
+
+[data-palette="arcade"][data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f1ff;
+  --bg-deep: #ece3fd;
+  --surface-card: #ffffff;
+  --surface-muted: #f4eeff;
+  --surface-column: #efe7fe;
+  --card-border: #d9cbf5;
+  --text: #1a0b33;
+  --text-muted: #5d4a8a;
+  --accent: #c0108a;
+  --accent-strong: #8f0a66;
+  --accent-wash: #fde3f4;
+  --text-on-accent: #ffffff;
+  --cyan: #006a80;
+  --agent: #6b3fd4;
+  --border: #d9cbf5;
+  --border-strong: #9a80d6;
+  --danger: #c4123f;
+  --warning: #855800;
+  --success: #0a7339;
+  --gradient: linear-gradient(90deg, var(--accent), var(--cyan));
+  --glow: 0 0 0 1px var(--accent), 0 4px 14px rgb(192 16 138 / .18);
+  --shadow: 0 1px 0 rgb(26 11 51 / .06);
+  --tour-scrim: rgb(26 11 51 / .48);
+}
+
+/* Clean: sidequest's stock palette and fonts. */
+[data-palette="clean"] {
+  color-scheme: light;
+  --font-sans: "Karla Variable", "Segoe UI", sans-serif;
+  --font-serif: "Newsreader Variable", Georgia, serif;
+  --font-mono: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+  --bg: #f4f2ec;
+  --bg-deep: #eae8e1;
+  --surface-card: #fffefa;
+  --surface-muted: #e2e0d8;
+  --surface-column: #eceae3;
+  --card-border: #d9d6cd;
+  --text: #202329;
+  --text-muted: #5a6067;
+  --accent: #46528e;
+  --accent-strong: #323f76;
+  --accent-wash: #e5e7ef;
+  --text-on-accent: #faf9f5;
+  --cyan: var(--accent);
+  --agent: var(--accent-strong);
+  --border: #cdcac0;
+  --border-strong: #8c9298;
+  --danger: #a84035;
+  --warning: #9a6900;
+  --success: #3f745c;
+  --status-todo: var(--accent);
+  --hover-border: var(--border-strong);
+  --dialog-shadow: 0 18px 56px rgb(12 16 22 / .28), 0 2px 8px rgb(12 16 22 / .16);
+  --gradient: linear-gradient(90deg, var(--border), var(--border));
+  --glow: 0 2px 4px rgb(24 28 34 / .09);
+  --shadow: 0 1px 2px rgb(24 28 34 / .06);
+  --focus-ring: 0 0 0 3px var(--accent-strong);
+  --tour-scrim: rgb(12 16 22 / .48);
+}
+
+[data-palette="clean"][data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #171a1e;
+  --bg-deep: #1d2227;
+  --surface-card: #242a30;
+  --surface-muted: #14181c;
+  --surface-column: #1d2227;
+  --card-border: #3c444c;
+  --text: #ece9e0;
+  --text-muted: #a8aca9;
+  --accent: #9eaaff;
+  --accent-strong: #c3caff;
+  --accent-wash: #2c3554;
+  --text-on-accent: #171a1e;
+  --border: #343b42;
+  --border-strong: #626b74;
+  --danger: #f08a79;
+  --warning: #e0af4e;
+  --success: #76b393;
+  --dialog-shadow: 0 18px 56px rgb(0 0 0 / .5), 0 2px 8px rgb(0 0 0 / .3);
+  --glow: 0 2px 6px rgb(0 0 0 / .3);
+  --shadow: 0 1px 2px rgb(0 0 0 / .25);
+  --tour-scrim: rgb(0 0 0 / .62);
+}
+
+/* Tokyo Night (folke/tokyonight "night"); light mode is its "day" variant, with the text colors darkened until
+   they pass WCAG AA on its surfaces. */
+[data-palette="tokyo-night"] {
+  color-scheme: dark;
+  --bg: #1a1b26;
+  --bg-deep: #16161e;
+  --surface-card: #24283b;
+  --surface-muted: #16161e;
+  --surface-column: #1f2335;
+  --card-border: #3b4261;
+  --text: #c0caf5;
+  --text-muted: #8a93c0;
+  --accent: #7aa2f7;
+  --accent-strong: #89ddff;
+  --accent-wash: #283457;
+  --cyan: #7dcfff;
+  --agent: #bb9af7;
+  --border: #3b4261;
+  --border-strong: #545c7e;
+  --danger: #f7768e;
+  --warning: #e0af68;
+  --success: #9ece6a;
+  --gradient: linear-gradient(90deg, #7aa2f7, #bb9af7);
+  --tour-scrim: rgb(10 11 18 / .66);
+}
+
+[data-palette="tokyo-night"][data-theme="light"] {
+  color-scheme: light;
+  --bg: #e1e2e7;
+  --bg-deep: #d0d5e3;
+  --surface-card: #eeeff3;
+  --surface-muted: #e9eaef;
+  --surface-column: #d6d8e2;
+  --card-border: #c4c8da;
+  --text: #2a4793;
+  --text-muted: #4d5b93;
+  --accent: #225cac;
+  --accent-strong: #1a4787;
+  --accent-wash: #d3ddf2;
+  --text-on-accent: #ffffff;
+  --cyan: #00677f;
+  --agent: #7445b7;
+  --border: #c4c8da;
+  --border-strong: #a1a6c5;
+  --danger: #a63838;
+  --warning: #745a33;
+  --success: #4d6632;
+  --gradient: linear-gradient(90deg, #2e7de9, #9854f1);
+  --dialog-shadow: 0 18px 56px rgb(30 40 80 / .24), 0 2px 8px rgb(30 40 80 / .12);
+  --shadow: 0 1px 2px rgb(30 40 80 / .08);
+  --tour-scrim: rgb(40 50 90 / .42);
+}
+
+/* Catppuccin flavors (catppuccin/palette). Each flavor sets the raw palette; one mapping turns it into tokens. */
+[data-palette="catppuccin-mocha"] {
+  color-scheme: dark;
+  --ctp-base: #1e1e2e; --ctp-mantle: #181825; --ctp-crust: #11111b;
+  --ctp-surface0: #313244; --ctp-surface1: #45475a; --ctp-overlay0: #6c7086;
+  --ctp-text: #cdd6f4; --ctp-subtext0: #a6adc8;
+  --ctp-mauve: #cba6f7; --ctp-pink: #f5c2e7; --ctp-lavender: #b4befe; --ctp-blue: #89b4fa;
+  --ctp-red: #f38ba8; --ctp-peach: #fab387; --ctp-yellow: #f9e2af; --ctp-green: #a6e3a1;
+}
+
+[data-palette="catppuccin-macchiato"] {
+  color-scheme: dark;
+  --ctp-base: #24273a; --ctp-mantle: #1e2030; --ctp-crust: #181926;
+  --ctp-surface0: #363a4f; --ctp-surface1: #494d64; --ctp-overlay0: #6e738d;
+  --ctp-text: #cad3f5; --ctp-subtext0: #a5adcb;
+  --ctp-mauve: #c6a0f6; --ctp-pink: #f5bde6; --ctp-lavender: #b7bdf8; --ctp-blue: #8aadf4;
+  --ctp-red: #ed8796; --ctp-peach: #f5a97f; --ctp-yellow: #eed49f; --ctp-green: #a6da95;
+}
+
+[data-palette="catppuccin-frappe"] {
+  color-scheme: dark;
+  --ctp-base: #303446; --ctp-mantle: #292c3c; --ctp-crust: #232634;
+  --ctp-surface0: #414559; --ctp-surface1: #51576d; --ctp-overlay0: #737994;
+  --ctp-text: #c6d0f5; --ctp-subtext0: #a5adce;
+  --ctp-mauve: #ca9ee6; --ctp-pink: #f4b8e4; --ctp-lavender: #babbf1; --ctp-blue: #8caaee;
+  --ctp-red: #e78284; --ctp-peach: #ef9f76; --ctp-yellow: #e5c890; --ctp-green: #a6d189;
+}
+
+[data-palette="catppuccin-latte"] {
+  color-scheme: light;
+  --ctp-base: #eff1f5; --ctp-mantle: #e6e9ef; --ctp-crust: #dce0e8;
+  --ctp-surface0: #ccd0da; --ctp-surface1: #bcc0cc; --ctp-overlay0: #9ca0b0;
+  --ctp-text: #4c4f69; --ctp-subtext0: #6c6f85;
+  --ctp-mauve: #8839ef; --ctp-pink: #ea76cb; --ctp-lavender: #7287fd; --ctp-blue: #1e66f5;
+  --ctp-red: #d20f39; --ctp-peach: #fe640b; --ctp-yellow: #df8e1d; --ctp-green: #40a02b;
+}
+
+[data-palette^="catppuccin-"] {
+  --bg: var(--ctp-base);
+  --bg-deep: var(--ctp-mantle);
+  --surface-card: var(--ctp-surface0);
+  --surface-muted: var(--ctp-crust);
+  --surface-column: var(--ctp-mantle);
+  --card-border: var(--ctp-surface1);
+  --text: var(--ctp-text);
+  --text-muted: var(--ctp-subtext0);
+  --accent: var(--ctp-mauve);
+  --accent-strong: var(--ctp-pink);
+  --text-on-accent: var(--ctp-crust);
+  --cyan: var(--ctp-blue);
+  --agent: var(--ctp-lavender);
+  --border: var(--ctp-surface1);
+  --border-strong: var(--ctp-overlay0);
+  --danger: var(--ctp-red);
+  --warning: var(--ctp-yellow);
+  --success: var(--ctp-green);
+  --gradient: linear-gradient(90deg, var(--ctp-mauve), var(--ctp-blue));
+  --tour-scrim: color-mix(in srgb, var(--ctp-crust) 70%, transparent);
+}
+
+/* Latte is light: cards sit lighter than the columns, and peach replaces yellow so "doing" stays readable. */
+[data-palette="catppuccin-latte"] {
+  --bg: var(--ctp-mantle);
+  --bg-deep: var(--ctp-crust);
+  --surface-card: var(--ctp-base);
+  --surface-muted: var(--ctp-mantle);
+  --surface-column: var(--ctp-crust);
+  --text-on-accent: var(--ctp-base);
+  --warning: var(--ctp-peach);
+  --dialog-shadow: 0 18px 56px rgb(76 79 105 / .24), 0 2px 8px rgb(76 79 105 / .12);
+  --shadow: 0 1px 2px rgb(76 79 105 / .08);
+}
+
+:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme] { --motion-fast: calc(0 * 1ms); }
+  *, *::before, *::after { animation-duration: 0ms !important; transition-duration: 0ms !important; scroll-behavior: auto !important; }
+}
