@@ -60,8 +60,15 @@ How it is wired, in `~/.claude/keybindings.json`:
 
 ### Guardrails tab
 - Lists the rules the project gives agents, read from CLAUDE.md, AGENTS.md, GUARDRAILS.md, `.claude/rules`, `.claude/agents`, skills, `agent_rules` and Cursor rules.
-- A project with none shows a default set: ask before installs, pushes and deploys; never force push or run dangerous commands.
-- Ops Control only shows the rules; it does not enforce them.
+- Below them, Ops Control's own guardrails: Edits outside project, Deleting files, Downloads, Package installs, Git push, Deploy & publish (Ask first), Force push & resets and Dangerous commands (Never).
+- **Every rule has an on/off switch** (↑/↓ to reach it, Enter or a click to flip it). The choices are kept per project folder.
+
+| Switch | On | Off |
+|---|---|---|
+| **Ops Control guardrail** | enforced: a matching call (a `git push`, an `npm install`, an edit outside the project…) is put to you to approve, even in auto mode, or refused for a Never | not enforced; Claude Code decides as usual. All start **off**. |
+| **Project rule** | Claude follows it as written (all start **on**) | at your next prompt Claude is told to disregard it for this project, and told again after a `/compact`; switching it back on tells Claude to follow it again |
+
+A project rule can't be taken out of CLAUDE.md itself, which Claude still reads; the switch only tells Claude to set it aside.
 
 ### Agents tab
 - The main session comes first (`★ <name>`), then every subagent with its elapsed time, tokens and current step.
@@ -95,6 +102,7 @@ Shows what is playing on your machine from any player, not only Spotify:
 
 - **Divider line (new):** a full-width line on top separates the bar from Claude's thinking and text above it.
 - **Row 1:** what Claude is doing toward the current milestone, the step number and how long it has run. Open issues and running subagents show at the right end.
+- **Only the current task's milestones:** a new request starts with an empty track, so the last task's milestones disappear as soon as you send the next one. A prompt sent while another request is still running keeps that request's milestones. Claude's task list fills in only while it has unfinished tasks.
 - **Row 2:** the milestones as a track (`●━●━◉─○─○ 2/5`), the context meter with the auto-compact point marked, and the 5-hour limit with its reset time.
 - **Plain-language steps (new):** a shell step shows the description Claude gave the command, such as "Read the arcade app source", instead of the raw command (`Running cd …; cat …`). The raw command only appears when a call has no description.
 - **Subagent view (new):** when you open a subagent's transcript, the bar shows that subagent's own milestones, context and current step. Before, the bar disappeared there.

@@ -1,5 +1,7 @@
 # ops-control
 
+![Ops Control in Claude Code: the transcript on the left with the work bar over the prompt (6 of 6 milestones done, context 18%, 5-hour limit 35%), and the Ops Control pane on the right on its Plan tab, listing four requests, above the status box with the HP bar, the level and the pet](docs/ops-control.png)
+
 A Claude Code plugin marketplace with three plugins that work together:
 
 | Plugin | What it is | Based on |
@@ -10,21 +12,27 @@ A Claude Code plugin marketplace with three plugins that work together:
 
 ## Install
 
-From inside Claude Code (2.1.289 or later):
+One command installs all three plugins (Claude Code 2.1.289 or later, on Linux, macOS or WSL):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Hanafubuki/ops-control/main/install.sh | sh
+```
+
+It adds this marketplace (or updates it), installs `ops-control`, `sidequest` and `prismantis` from it, and writes `~/.claude/keybindings.json` with Ops Control's shortcuts (Alt+1–7 and the arrows) if you have none yet; an existing one is left alone. Restart Claude Code afterwards. To read the script first, open [install.sh](install.sh).
+
+If you used glowup, Sidequest or prismantis from their own marketplaces before, add `--replace` so those copies are uninstalled first and nothing loads twice:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Hanafubuki/ops-control/main/install.sh | sh -s -- --replace
+```
+
+Or install them one by one from inside Claude Code:
 
 ```text
 /plugin marketplace add Hanafubuki/ops-control
 /plugin install ops-control@ops-control
 /plugin install sidequest@ops-control
 /plugin install prismantis@ops-control
-```
-
-If you used glowup, Sidequest or prismantis from their own marketplaces before, uninstall those copies first so nothing loads twice:
-
-```text
-/plugin uninstall glowup@glowup
-/plugin uninstall sidequest@eigenwise-toolshed
-/plugin uninstall prismantis@prismantis
 ```
 
 On its first start Ops Control copies your packs, themes, pets and name packs from `~/.claude/glowup` to `~/.claude/ops-control`. Settings kept in Claude Code's plugin storage (the current look, level and XP, the chosen name pack) start fresh.
@@ -39,7 +47,7 @@ On its first start Ops Control copies your packs, themes, pets and name packs fr
 | **Enter** | on a control | press it; on a dropdown, open or close it |
 | **Esc** | in the pane | back to the prompt |
 
-These need a few lines in `~/.claude/keybindings.json`; see [Ops Control's README](plugins/ops-control/README.md#keyboard).
+These come from a few lines in `~/.claude/keybindings.json`, which `install.sh` writes when you have none; otherwise add them yourself, as shown in [Ops Control's README](plugins/ops-control/README.md#keyboard).
 
 ## The tabs (Ops Control)
 
@@ -49,7 +57,7 @@ The pane docks beside the transcript in fullscreen on a wide terminal (144 colum
 |---|---|---|---|
 | 1 | **Plan** | Every request you made this session, newest on top, with its status, then Claude's task list. | Open a request to see its objective, its milestones, what was done, its **issues** (tool calls that failed or were refused and aren't fixed yet), and the questions and action items left for you. Requests made before Ops Control loaded are read back from the transcript. |
 | 2 | **Context** | How full the context window is: a bar split by what fills it, a chart over the session, the turns left before auto-compact, and the heaviest sources you could trim. Below that, **CPU and RAM** (Linux, WSL and macOS, refreshed every 3 seconds while the tab is open) and your **5-hour and weekly** plan usage with reset times (or this session's cost on an API key). | Read only. |
-| 3 | **Guardrails** | The rules the project gives agents: CLAUDE.md, AGENTS.md, GUARDRAILS.md, `.claude/rules`, `.claude/agents`, skills, `agent_rules` and Cursor rules. A project with none shows a default set (ask before installs, pushes and deploys; never force push). | Read only. Ops Control shows the rules; it doesn't enforce them. |
+| 3 | **Guardrails** | The rules the project gives agents (CLAUDE.md, AGENTS.md, GUARDRAILS.md, `.claude/rules`, `.claude/agents`, skills, `agent_rules`, Cursor rules), then Ops Control's own guardrails: Edits outside project, Deleting files, Downloads, Package installs, Git push, Deploy & publish (Ask first), Force push & resets and Dangerous commands (Never). | Every rule has an on/off switch (↑/↓, then Enter), kept per project. An Ops Control guardrail switched **on** is enforced: a matching call is put to you to approve, even in auto mode, or refused for a Never (all start off). A project rule switched **off** is one Claude is told to disregard at your next prompt, and again after `/compact` (all start on). |
 | 4 | **Agents** | The main session first (`★`), then every subagent with its time, tokens and current step, named after the active pack's cast. | Open one for its detail view: what it was asked, a **Context** meter for its own window, its **Milestones**, what it is doing **Now** and its latest **Steps**. `‹ All agents` (or `q`) goes back. |
 | 5 | **Diff** | The files Claude edited or created, newest first, with added and removed line counts, and their changes as hunks. A commit removes the committed files. | Read only. |
 | 6 | **Music** | What is playing on your machine (any player on Linux; Windows media sessions on Windows and WSL; `media-control` or Spotify on macOS), with a progress bar. | Prev / Pause / Next (`r`, `p`, `n`). While music plays the pet dances. |
@@ -66,7 +74,7 @@ The pane docks beside the transcript in fullscreen on a wide terminal (144 colum
 
 A dropdown opens and closes with Enter (or a click). While it is open, ↑/↓ move only through its options, and nothing changes until you press Enter on one.
 
-Above the prompt, the **work bar** shows what Claude is doing toward the current milestone, the milestones as a track (`●━●━◉─○─○ 2/5`), the context meter and the 5-hour limit. When you open a subagent's transcript, the bar shows that subagent's own milestones and context.
+Above the prompt, the **work bar** shows what Claude is doing toward the current milestone, the milestones as a track (`●━●━◉─○─○ 2/5`), the context meter and the 5-hour limit. Only the current task's milestones show: a new request starts with an empty track until Claude records its own. When you open a subagent's transcript, the bar shows that subagent's own milestones and context.
 
 ## Packs (Ops Control)
 

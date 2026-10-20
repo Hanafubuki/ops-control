@@ -19,7 +19,7 @@ import { coverPlaceholder } from './music/art.ts'
 import type { MusicCaps } from './music/reader.ts'
 import { currentMilestone, openIssues, requestTitle, workedMs, type Milestone, type MilestoneStatus, type Request, type Requests, type RequestStatus } from './requests.ts'
 import { markdownRows, wrapSegs } from './mdrows.ts'
-import type { Guardrails } from './guardrails.ts'
+import type { GuardSwitches, Guardrails } from './guardrails.ts'
 import { guardrailRows } from './guardrailstab.ts'
 import { loadRows, type SysLoad } from './sysload.ts'
 
@@ -33,7 +33,9 @@ export type PaneView = { tab: TabId; offset?: number; categories?: { name: strin
   // and the main session's name
   agent?: string; names?: Record<string, string>; mainName?: string
   // the main session's milestones in its detail view, as the work bar follows them (workbar.ts workOf)
-  mainWork?: { steps: readonly Milestone[]; objective?: string } }
+  mainWork?: { steps: readonly Milestone[]; objective?: string }
+  // the Guardrails tab's switches for this project (guardrails.ts)
+  guardSwitches?: GuardSwitches }
 export const TABS: [TabId, string][] = [['plan', 'Plan'], ['context', 'Context'], ['guardrails', 'Guardrails'], ['agents', 'Agents'], ['diff', 'Diff'], ['music', 'Music'], ['settings', 'Settings']]
 // The Agents tab's key for the main session's own row and detail view.
 export const MAIN_AGENT = 'main'
@@ -203,9 +205,16 @@ function fileRow(f: Model['files'][number], t: Theme, iw: number, lead: string):
 // The project's rules for agents, or the default set (guardrails.ts reads them, guardrailstab.ts draws them).
 function guardrailsTab(v: PaneView, t: Theme, w: number, compact: boolean, limit: number, border: Border): Part {
   const lead = compact ? '  ' : '', iw = compact ? w : boxInner(w)
-  const { body, right } = guardrailRows(v.guardrails, t, iw, lead)
-  if (compact) return { rows: cap(body, t, w, 0, limit).map(r => fit(r, w)), n: -1 }
-  return { rows: section('GUARDRAILS', right, body, w, t, border), n: body.length }
+  const { body, right, switches } = guardrailRows(v.guardrails, t, iw, lead, v.guardSwitches)
+  // a switch row's place in `rows` once the box is drawn around `body`: pressing it toggles the switch
+  const linksAt = (rows: Seg[][], first: number, edge: boolean): RowLink[] =>
+    switches.flatMap(([i, id]) => { const row = rows[first + i]; return row ? [{ row, id, lead: edge ? 1 : 0, tail: edge ? 2 : 0 }] : [] })
+  if (compact) {
+    const capped = cap(body, t, w, 0, limit).map(r => fit(r, w))
+    return { rows: capped, n: -1 }
+  }
+  const rows = section('GUARDRAILS', right, body, w, t, border)
+  return { rows, n: body.length, links: linksAt(rows, 1, w >= MIN_BOX) }
 }
 
 const DIFF_LINES = 2000
@@ -682,6 +691,8 @@ export function statusRows(model: Model, base: Theme, width: number, now: number
 export type PaneExtra = { look?: Look; pet?: { id: PetId; node: unknown; rows?: number }; bubble?: { text: string; mood: BubbleMood }; friday?: boolean; minRows?: number; bodyRows?: number; onRange?: (last: number, win: number) => void; meter?: Seg[][]; field?: (rows: number) => unknown; tabs?: readonly TabId[]; onMusic?: (cmd: MusicCmd) => void; onPlayer?: () => void; seek?: (props: SeekBarProps) => unknown; requests?: Requests; onRequest?: (id?: string) => void
   // the Agents tab: opens an agent's detail view (MAIN_AGENT for the main session), or the list with none
   onAgent?: (key?: string) => void
+  // the Guardrails tab: flips the switch of a row (guardrailstab.ts switchKey)
+  onGuard?: (key?: string) => void
   // the Settings tab's controls, drawn by register.tsx (settingstab.tsx)
   settings?: unknown }
 export const PET_STRIP_COLS = 46
@@ -782,7 +793,7 @@ export function renderPane(els: { Box: any; Text: any; Button: any }, m: Model, 
   let { rows, body, controls, seek, links, nav } = tabParts(m, t, v, inner, compact, now, rowsLeft, look?.border ?? 'round', extra?.requests)
   // links and nav open requests on the Plan tab and agents on the Agents tab; without a handler a row is plain
   // text and a view in full has no way back, so neither is drawn
-  const go = v.tab === 'agents' ? extra?.onAgent : extra?.onRequest
+  const go = v.tab === 'agents' ? extra?.onAgent : v.tab === 'guardrails' ? extra?.onGuard : extra?.onRequest
   if (!go) { links = undefined; nav = undefined }
   const linkOf = new Map((links ?? []).map(l => [l.row, l] as const))
   let hint: any = null, open = 0, last = 0, win = 0

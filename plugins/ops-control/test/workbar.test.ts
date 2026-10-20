@@ -71,15 +71,17 @@ test('the headline row carries the open issues and the running subagents at its 
   expect(text(workBarRows(T, input({ issues: 1 }))[1])).toContain('▲ 1 issue')
 })
 
-test('the bar follows the newest request with milestones, a folded prompt its host\'s, else the task list', () => {
+test('the bar follows the newest request alone: a new one clears the last list, a folded prompt keeps its host\'s', () => {
   let { rs } = submit(initialRequests(), { text: 'build it', at: 1 })
   rs = startTurn(rs, { turnId: 't1', text: 'build it', at: 1 })
   rs = toolEnd(rs, { tool: 'mcp__ops-control__milestones', toolUseId: 'm1', input: { objective: 'Build it', milestones: [{ title: 'A', status: 'in_progress' }] }, isError: false, text: '' })
   expect(workOf(rs, [])).toEqual({ steps: [{ title: 'A', status: 'in_progress' }], objective: 'Build it' })
-  // a later request with none of its own keeps the bar on the last list
+  // a later request with none of its own starts with an empty track: the last task's milestones are gone
   rs = submit(rs, { text: 'and more', at: 2 }).rs
-  expect(workOf(rs, []).steps).toHaveLength(1)
-  expect(workOf(initialRequests(), [{ id: '1', title: 'Task', status: 'completed' }])).toEqual({ steps: [{ title: 'Task', status: 'completed' }] })
+  expect(workOf(rs, [])).toEqual({ steps: [] })
+  // Claude's task list fills in only while a task is open; a finished one is no current work
+  expect(workOf(initialRequests(), [{ id: '1', title: 'Task', status: 'completed' }])).toEqual({ steps: [] })
+  expect(workOf(rs, [{ id: '1', title: 'Task', status: 'in_progress' }, { id: '2', title: 'Next', status: 'pending' }]).steps).toHaveLength(2)
   rs = toolEnd(rs, { tool: 'Bash', toolUseId: 'b1', input: { command: 'make' }, isError: true, text: 'Exit code 2' })
   expect(workIssues(rs)).toBe(0)
   expect(workIssues({ ...rs, list: rs.list.slice(0, 1) })).toBe(1)

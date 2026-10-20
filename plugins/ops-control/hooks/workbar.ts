@@ -200,16 +200,18 @@ export function headlineRow(t: Theme, w: WorkInput): Seg[] {
   return [...l, { text: ' '.repeat(Math.max(1, w.columns - visibleLength(l) - visibleLength(right))), color: c.text }, ...right]
 }
 
-// The work the bar follows: the milestones of the newest request that reported any (a prompt taken into another
-// request's turn has that turn's), else Claude's task list.
+// The work the bar follows: the newest request's milestones (a prompt taken into another request's turn has that
+// turn's), else Claude's task list while some task is still open. A new request starts with an empty track, so the
+// last task's milestones leave the bar as soon as the next request is sent.
 export function workOf(rs: Requests | undefined, plan: readonly PlanItem[]): { steps: Milestone[]; objective?: string } {
   const list = rs?.list ?? []
-  for (let i = list.length - 1; i >= 0; i--) {
-    const r = list[i]!
+  const r = list.at(-1)
+  if (r) {
     const host = !r.milestones.length && r.foldedInto ? list.find(x => x.id === r.foldedInto) : undefined
     const from = r.milestones.length ? r : host?.milestones.length ? host : undefined
     if (from) return { steps: from.milestones, ...((from.objective ?? r.objective) && { objective: from.objective ?? r.objective }) }
   }
+  if (!plan.some(p => p.status !== 'completed')) return { steps: [] }
   return { steps: plan.map(p => ({ title: p.title, status: p.status })) }
 }
 

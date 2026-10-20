@@ -33,7 +33,7 @@ import { tierFor } from './layout.tsx'
 import { renderBand, renderWorkBar } from './band.tsx'
 import { MILESTONES_SPEC, otherOffers, policy, recorded } from './milestones.ts'
 import { agentWork, workIssues, workOf } from './workbar.ts'
-import { isSource, readGuardrails } from './guardrails.ts'
+import { NO_SWITCHES, isSource, offNote, readGuardrails, readSwitches, toggle, verdictFor, type GuardSwitches } from './guardrails.ts'
 import { renderPane, bubbleBox, petStripCols, visibleTabs, COVER_COLS, type PaneExtra, type PaneView, type TabId } from './pane.tsx'
 import { spinnerWord, newTurnWord } from './restyle.ts'
 import { styleRow } from './rows.tsx'
@@ -539,10 +539,18 @@ async function loadRequests($: Engine, fresh = false) {
   void $.state.set(REQS, { requests: withinSize(requests), sid: sessionId, at: Date.now() })
 }
 // The project's guardrails for the Guardrails tab: read at start, and again when Claude edits one of their files.
+// The Guardrails tab's switches for this project, kept in the store under the project's folder; and the note about
+// project rules switched off that rides on the next prompt (and again after a compaction drops it).
+let guardSw: GuardSwitches = NO_SWITCHES
+let guardNote: string | undefined
+const guardKey = () => `guardrails:${cwd}`
+
 async function loadGuardrails($: Engine) {
   if (!cwd) return
   try {
-    view = { ...view, guardrails: await readGuardrails(hostOf($), cwd, Date.now()) }
+    const host = hostOf($)
+    guardSw = readSwitches(await host.storeGet(guardKey()))
+    view = { ...view, guardrails: await readGuardrails(host, cwd, Date.now()) }
     publish($)
   } catch (err) {
     $.ui.log(`ops-control guardrails read failed: ${err instanceof Error ? err.message : String(err)}`, { to: 'debug' })
@@ -566,9 +574,22 @@ async function offerMilestones($: Engine) {
 // the system prompt, which it would change for every request.
 let policyGiven = false
 function withPolicy(e: PromptSubmitInput): PromptSubmitInput {
-  if (policyGiven || !milestonesTool || e.command) return e
-  policyGiven = true
-  return { ...e, context: [...(e.context ?? []), policy(milestonesTool)] }
+  if (e.command) return e
+  const add: string[] = []
+  if (!policyGiven && milestonesTool) { policyGiven = true; add.push(policy(milestonesTool)) }
+  // the Guardrails tab's project rules switched off (or back on) since the last prompt
+  if (guardNote) { add.push(guardNote); guardNote = undefined }
+  return add.length ? { ...e, context: [...(e.context ?? []), ...add] } : e
+}
+
+// Flips a Guardrails switch, keeps it for the project, and tells Claude at the next prompt when a project rule changed.
+function flipGuard($: Engine, key: string | undefined) {
+  if (!key || !cwd) return
+  const isDefault = key.startsWith('d:'), id = key.slice(2)
+  guardSw = toggle(guardSw, id, isDefault)
+  void hostOf($).storeSet(guardKey(), guardSw).catch(() => {})
+  if (!isDefault) guardNote = offNote(view.guardrails, guardSw) ?? 'The person switched every project rule back on in the Ops Control Guardrails tab: follow them all again.'
+  publish($)
 }
 // The milestone the work bar shows as current, and since when: a new title starts its clock.
 let workSince = { title: '', at: 0 }
@@ -2017,6 +2038,16 @@ export const register: Register = (on, options) => {
     return ran
   })
 
+  // A default switched on in the Guardrails tab is enforced: a call it covers is put to the person (no classifier's
+  // allow settles it) or refused. It only tightens: a call already refused stays refused.
+  on('tool.check', async ($, e, next) => {
+    const r = await next(e)
+    if (off || r.decision === 'deny' || !cwd) return r
+    const v = verdictFor(e.tool, e.input, cwd, guardSw)
+    if (!v) return r
+    return { ...r, decision: v.decision, reason: v.reason, ...(v.decision === 'ask' && { decider: 'person' as const }) }
+  })
+
   // ops-control's milestones tool answers here; the hook above, which wraps this one, files the list under the request.
   on('tool.call', { tool: /^mcp__ops-control__milestones$/ }, async ($, e, next) => {
     if (off || !milestonesTool) return next(e)
@@ -2117,8 +2148,9 @@ export const register: Register = (on, options) => {
     if (off) return next(e)
     const r = await next(e)
     if (e.agentId || e.trigger === 'precompute' || 'skip' in r) return r
-    // the summary leaves the policy's prompt behind
+    // the summary leaves the policy's prompt behind, and the note about project rules switched off
     policyGiven = false
+    guardNote = offNote(view.guardrails, guardSw) ?? guardNote
     // usage().context.percent is absent until the next response, so a manual
     // /compact would leave the hearts empty; derive it from the result.
     const u = await $.session.usage()
@@ -2226,7 +2258,7 @@ export const register: Register = (on, options) => {
     // read through the state so a change to the requests redraws the pane
     const asked = (await $.state.get(REQS)).value as { requests?: Requests } | undefined
     extra = { ...extra, requests: asked?.requests ?? requests, onRequest: (id?: string) => { view = { ...view, tab: 'plan', request: id, offset: 0 }; publish($) } }
-    extra = { ...extra, onAgent: (key?: string) => { view = { ...view, tab: 'agents', agent: key, offset: 0 }; publish($) } }
+    extra = { ...extra, onAgent: (key?: string) => { view = { ...view, tab: 'agents', agent: key, offset: 0 }; publish($) }, onGuard: (key?: string) => flipGuard($, key) }
     if (v.tab === 'settings') {
       const themes = [...new Set([...Object.keys(PRESETS), ...Object.keys(await loadUserThemes(hostOf($)).catch(() => ({})))])]
       extra = { ...extra, settings: renderSettings(els, theme, {
@@ -2259,7 +2291,7 @@ export const register: Register = (on, options) => {
       }
     }
     const caps = musicCapsFor(m)
-    const drawn = renderPane(els, m, theme, { ...v, meter: setup.meter, cover: coverFor(m), ...(caps && { musicCaps: caps }), names: namesFor(m), mainName: currentPack().main, mainWork: workOf(asked?.requests ?? requests, m.plan) }, e.props.bodyColumns, compact, Date.now(), (id: TabId) => {
+    const drawn = renderPane(els, m, theme, { ...v, meter: setup.meter, cover: coverFor(m), ...(caps && { musicCaps: caps }), names: namesFor(m), mainName: currentPack().main, mainWork: workOf(asked?.requests ?? requests, m.plan), guardSwitches: guardSw }, e.props.bodyColumns, compact, Date.now(), (id: TabId) => {
       showTab($, id)
       // a tab pressed from the prompt (its Alt+digit) hands the shown pane the keyboard, so the arrows and Enter work in it at once
       void $.ui.panes().then(ps => {
