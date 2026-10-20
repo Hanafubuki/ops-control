@@ -1378,6 +1378,10 @@ function startRemote($: Engine, dir: string, cursor: Cursor) {
   remoteTimer = $.clock.every(250, () => void pollRemote($))
 }
 
+// /ops config runs glowup's prebuilt settings screen, which is released with glowup's own version numbers; Ops Control's
+// version (1.0.0 on) says nothing about which of those to download.
+const CONFIG_BINARY_VERSION = '1.2.0'
+
 async function versionOf($: Engine): Promise<string> {
   modVersion ??= await hostOf($).readFile(`${$.plugin.root}/.claude-plugin/plugin.json`)
     .then(t => String((JSON.parse(t) as { version?: unknown }).version ?? 'dev'), () => 'dev')
@@ -1458,7 +1462,7 @@ async function installerTarget($: Engine) {
   return { windows, platform: platformOf(unameS), target: releaseTarget(unameS, unameM) }
 }
 const installerBinary = async ($: Engine, t: Awaited<ReturnType<typeof installerTarget>>) =>
-  ensureBinary(hostOf($), { opsControlBin: (await $.env.get('OPS_CONTROL_BIN')) || undefined, pluginRoot: $.plugin.root, version: await versionOf($), target: t.target, windows: t.windows, onDownload: () => $.ui.toast('Downloading glowup-installer…') })
+  ensureBinary(hostOf($), { opsControlBin: (await $.env.get('OPS_CONTROL_BIN')) || undefined, pluginRoot: $.plugin.root, version: (await versionOf($)) === 'dev' ? 'dev' : CONFIG_BINARY_VERSION, target: t.target, windows: t.windows, onDownload: () => $.ui.toast('Downloading glowup-installer…') })
 
 async function openConfigTui($: Engine): Promise<string> {
   const surfaces = await $.session.surfaces().catch(() => ['terminal'])

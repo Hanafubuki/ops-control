@@ -6,7 +6,7 @@ A Claude Code plugin marketplace with three plugins that work together:
 
 | Plugin | What it is | Based on |
 |---|---|---|
-| [**Ops Control**](plugins/ops-control) | A cockpit pane beside the transcript (Plan, Context, Guardrails, Agents, Diff, Music, Settings), a work bar over the prompt with milestones and context, name packs and pets, `/opstask` and `/opspin`, and keyboard navigation | [glowup](https://github.com/NovusEdge/glowup) v1.2.0 by Aliasgar Khimani |
+| [**Ops Control**](plugins/ops-control) | A cockpit pane beside the transcript (Plan, Context, Guardrails, Agents, Diff, Music, Settings), a work bar over the prompt with milestones and context, **interactive guardrails** you switch on and off, name packs and pets, `/opstask` and `/opspin`, and keyboard navigation | [glowup](https://github.com/NovusEdge/glowup) v1.2.0 by Aliasgar Khimani |
 | [**Sidequest**](plugins/sidequest) | A local work board and orchestration loop for Claude Code, here with the arcade dashboard restyle, a Claude sessions page and comment edit/delete | [Sidequest](https://github.com/Eigenwise/eigenwise-toolshed/tree/main/plugins/sidequest) v6.0.2 by Eigenwise |
 | [**prismantis**](plugins/prismantis) | Colorful, themeable rendering of Claude's replies: tables, headings, code, diagrams | [prismantis](https://github.com/NahumLitvin/prismantis) v0.31.1 by Nahum Litvin |
 
@@ -24,6 +24,12 @@ If you used glowup, Sidequest or prismantis from their own marketplaces before, 
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Hanafubuki/ops-control/main/install.sh | sh -s -- --replace
+```
+
+To install a specific release instead of the latest, add `--version` (see [Versions](#versions)):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Hanafubuki/ops-control/main/install.sh | sh -s -- --version v1.0.0
 ```
 
 Or install them one by one from inside Claude Code:
@@ -75,6 +81,32 @@ The pane docks beside the transcript in fullscreen on a wide terminal (144 colum
 A dropdown opens and closes with Enter (or a click). While it is open, ↑/↓ move only through its options, and nothing changes until you press Enter on one.
 
 Above the prompt, the **work bar** shows what Claude is doing toward the current milestone, the milestones as a track (`●━●━◉─○─○ 2/5`), the context meter and the 5-hour limit. Only the current task's milestones show: a new request starts with an empty track until Claude records its own. When you open a subagent's transcript, the bar shows that subagent's own milestones and context.
+
+## Guardrails (Ops Control)
+
+The Guardrails tab isn't just a list to read: every rule in it has a **switch**, and the switches change what happens. Open it with **Alt+3**, move to a rule with ↑/↓ and press **Enter** (or click it) to flip it. Your choices are saved for each project folder.
+
+```text
+╭─ GUARDRAILS ─────────────── 3 rules (1 off) · 2 enforced ─╮
+│ Project rules  off: Claude is told to disregard it        │
+│ CLAUDE.md  3                                              │
+│ ● on  ■ Never commit .env files                           │
+│ ○ off ■ Always write tests before code                    │
+│ ● on  □ Prefer small pull requests                        │
+│                                                           │
+│ Ops Control guardrails  on: enforced                      │
+│ ● on  Git push               Ask first                    │
+│ ● on  Force push & resets    Never                        │
+│ ○ off Package installs       Ask first                    │
+╰───────────────────────────────────────────────────────────╯
+```
+
+| Kind | Switched on | Switched off |
+|---|---|---|
+| **Ops Control guardrails**: Edits outside project, Deleting files, Downloads, Package installs, Git push, Deploy & publish (*Ask first*); Force push & resets, Dangerous commands (*Never*) | **Enforced.** A matching call (a `git push`, an `npm install`, an edit outside the project…) is put to you to approve, even in auto mode, or refused outright for a *Never*. | Not enforced; Claude Code decides as usual. All start **off**. |
+| **Project rules**, read from CLAUDE.md, AGENTS.md, GUARDRAILS.md, `.claude/rules`, `.claude/agents`, skills, `agent_rules` and Cursor rules | Claude follows the rule as written. All start **on**. | At your next prompt Claude is told to disregard that rule for this project, and told again after a `/compact`. Switching it back on tells Claude to follow it again. |
+
+A project rule stays in its file, which Claude still reads; the switch tells Claude to set it aside. To remove a rule for good, edit the file. Rules Claude Code decides on its own (project edits, network access, git commits) are listed without a switch.
 
 ## Packs (Ops Control)
 
@@ -160,6 +192,20 @@ Save it as `~/.claude/ops-control/packs/arcade-soft.json` (the `name` must match
 ```
 
 The easiest way to make one is to ask Claude, for example "make me an Ops Control pack from this palette" or "make arcade less pink"; the bundled `ops-control-pack` skill writes the file. `/ops import <file>` turns a Ghostty or base16 colour scheme into a pack. Every field is listed in [the pack reference](plugins/ops-control/docs/pack-reference.md).
+
+## Versions
+
+Each release is a git tag (`v1.0.0`, `v1.1.0`, …) with notes on the [Releases page](https://github.com/Hanafubuki/ops-control/releases) and in [CHANGELOG.md](CHANGELOG.md). Version numbers follow [semantic versioning](https://semver.org): a major number for changes that break how you use it, a minor for new features, a patch for fixes. The `version` of Ops Control in the marketplace matches the release; Sidequest and prismantis keep their own upstream version numbers.
+
+- **Latest:** `/plugin marketplace add Hanafubuki/ops-control` (or the one-command install) follows `main`, and `/plugin marketplace update ops-control` brings in new releases.
+- **A specific release:** pin the marketplace to its tag, then install as usual:
+
+```text
+/plugin marketplace add Hanafubuki/ops-control#v1.0.0
+/plugin install ops-control@ops-control
+```
+
+To move to another release later, remove the marketplace (`/plugin marketplace remove ops-control`) and add it again with the new tag, or run `install.sh --version <tag>`, which does that for you. A pinned marketplace stays on its release when you run `/plugin marketplace update`.
 
 ## What else is here
 

@@ -4,9 +4,11 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/Hanafubuki/ops-control/main/install.sh | sh
 #   curl -fsSL https://raw.githubusercontent.com/Hanafubuki/ops-control/main/install.sh | sh -s -- --replace
+#   curl -fsSL https://raw.githubusercontent.com/Hanafubuki/ops-control/main/install.sh | sh -s -- --version v1.0.0
 #
 # --replace first uninstalls the copies from their old marketplaces (glowup@glowup,
 # sidequest@eigenwise-toolshed, prismantis@prismantis), so nothing loads twice.
+# --version <tag> installs that release (a tag such as v1.0.0) instead of the latest.
 set -eu
 
 REPO=Hanafubuki/ops-control
@@ -15,13 +17,18 @@ PLUGINS="ops-control sidequest prismantis"
 OLD="glowup@glowup sidequest@eigenwise-toolshed prismantis@prismantis"
 
 replace=0
-for arg in "$@"; do
-  case "$arg" in
+version=""
+while [ $# -gt 0 ]; do
+  case "$1" in
     --replace) replace=1 ;;
-    -h|--help) sed -n '2,9p' "$0" 2>/dev/null || true; exit 0 ;;
-    *) echo "ops-control install: unknown option $arg (use --replace)" >&2; exit 2 ;;
+    --version) [ $# -ge 2 ] || { echo "ops-control install: --version needs a tag, e.g. v1.0.0" >&2; exit 2; }; version=$2; shift ;;
+    --version=*) version=${1#--version=} ;;
+    -h|--help) sed -n '2,11p' "$0" 2>/dev/null || true; exit 0 ;;
+    *) echo "ops-control install: unknown option $1 (use --replace or --version <tag>)" >&2; exit 2 ;;
   esac
+  shift
 done
+source=$REPO${version:+#$version}
 
 command -v claude >/dev/null 2>&1 || { echo "ops-control install: Claude Code (claude) is not on your PATH." >&2; exit 1; }
 
@@ -40,12 +47,20 @@ for id in $OLD; do
   fi
 done
 
-if claude plugin marketplace list --json 2>/dev/null | grep -q "\"name\": *\"$MARKETPLACE\""; then
-  echo "Updating the $MARKETPLACE marketplace"
-  claude plugin marketplace update "$MARKETPLACE"
+known=$(claude plugin marketplace list --json 2>/dev/null || echo '[]')
+if printf '%s' "$known" | grep -q "\"name\": *\"$MARKETPLACE\""; then
+  if [ -n "$version" ]; then
+    # the marketplace was added at another version: add it again pinned to this one
+    echo "Switching the $MARKETPLACE marketplace to $version"
+    claude plugin marketplace rm "$MARKETPLACE"
+    claude plugin marketplace add "$source"
+  else
+    echo "Updating the $MARKETPLACE marketplace"
+    claude plugin marketplace update "$MARKETPLACE"
+  fi
 else
-  echo "Adding the $MARKETPLACE marketplace"
-  claude plugin marketplace add "$REPO"
+  echo "Adding the $MARKETPLACE marketplace${version:+ at $version}"
+  claude plugin marketplace add "$source"
 fi
 
 for plugin in $PLUGINS; do
