@@ -2,6 +2,10 @@
 
 Releases of the ops-control marketplace. Version numbers follow [semantic versioning](https://semver.org); each release is a git tag.
 
+## [1.0.2] - 2026-10-20
+
+- Ops Control: a box around each reply in every look, plain tool rows, file diffs folded behind a changes toggle, and the life bar in every look
+
 ## [1.0.1] - 2026-10-20
 
 ### Ops Control 1.0.1
