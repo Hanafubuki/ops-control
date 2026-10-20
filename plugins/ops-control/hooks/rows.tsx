@@ -8,7 +8,8 @@ export type RowInput =
   | { site: 'ToolUse'; tool: string; input: unknown; isRunning: boolean; isErrored: boolean; isInterrupted: boolean; seq?: number }
   | { site: 'ToolResult' }
   | { site: 'UserMessage'; text: string; isExpanded: boolean; own: boolean; turn?: number }
-  | { site: 'AssistantMessage'; isFirstOfReply: boolean; xp?: number }
+  // conclusion: the block is a finished turn's final answer
+  | { site: 'AssistantMessage'; isFirstOfReply: boolean; xp?: number; conclusion?: boolean }
 
 type Els = { Box: any; Text: any }
 
@@ -85,12 +86,33 @@ function roleColor(look: Look, tool: string, input: Record<string, unknown>): st
   }
 }
 
+// The grey rule between Claude's messages, and the colour of nothing in any theme so it reads as a plain divider.
+export const DIVIDER_GREY = '#6c6c78'
+const RULE = '─'.repeat(400), DOUBLE = '═'.repeat(400)
+
+// Above a message that opens a reply: a grey rule, or for the turn's final answer a double rule in the theme's
+// accent with a "Conclusion" title. Long rules truncated to the row: no width props sit above the engine node.
+function opener({ Box, Text }: Els, look: Look, row: RowInput): unknown {
+  if (row.site !== 'AssistantMessage' || !row.isFirstOfReply) return null
+  const accent = look.theme.colors.accent
+  if (row.conclusion) {
+    return (
+      <Box key="opener" flexDirection="column" marginTop={1}>
+        <Text color={accent} wrap="truncate">{DOUBLE}</Text>
+        <Text color={accent} wrap="truncate">{DOUBLE}</Text>
+        <Text color={accent} bold wrap="truncate">Conclusion</Text>
+      </Box>
+    )
+  }
+  return <Box key="opener" flexDirection="column" marginTop={1}><Text color={DIVIDER_GREY} wrap="truncate">{RULE}</Text></Box>
+}
+
 export function styleRow(els: Els, look: Look, row: RowInput, engine: unknown, opts: { prefixCards?: boolean } = {}): unknown {
   const out = draw(els, look, row, engine, opts)
   if (look.rows === 'classic') return out
   const { Box } = els
   // Column, not Ink's default row: a row wrapper shrinks bordered cards to content width.
-  return <Box flexDirection="column" marginLeft={1}>{out}</Box>
+  return <Box flexDirection="column" marginLeft={1}>{opener(els, look, row)}{out}</Box>
 }
 
 function draw(els: Els, look: Look, row: RowInput, engine: unknown, opts: { prefixCards?: boolean }): unknown {

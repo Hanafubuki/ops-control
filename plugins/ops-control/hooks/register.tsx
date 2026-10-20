@@ -385,6 +385,15 @@ async function syncTakeover($: Engine) {
 // when it never goes away. This copy never shows it; the status line takeover is opt-in.
 const statusEntry = (): string | undefined => undefined
 
+// A message is a conclusion when it opens the answer a finished turn ended on: the requests keep each turn's answer
+// (clipped), so the first characters of both are compared.
+const answerKey = (text: string) => text.replace(/\s+/g, ' ').trim().slice(0, 160)
+function isFinalAnswer(text: string): boolean {
+  const key = answerKey(text)
+  if (key.length < 12) return false
+  return requests.list.some(r => r.turns.some(t => t.reason === 'answer' && answerKey(t.answer) === key))
+}
+
 // The model's combo moves on after a reply is drawn, and the engine redraws old rows on every
 // invalidate, so each reply keeps the count it first drew with.
 const xpByMessage = new Map<string, number>()
@@ -2109,6 +2118,8 @@ export const register: Register = (on, options) => {
     // the guard heartbeat can flip `off` while next() is awaited
     if (off) return r
     setRequests($, endTurn(requests, { turnId: e.turnId, answer: e.answer, reason: e.reason, durationMs: e.durationMs, at: Date.now(), plan: model.plan }))
+    // the final answer was drawn before the turn ended: draw the transcript again so it gets its Conclusion header
+    if (e.reason === 'answer' && e.answer.trim()) $.ui.invalidate('ui.render')
     // a prompt typed during this turn that no turn of its own takes soon was taken into this one
     if (hasQueued(requests)) {
       queuedSettle?.cancel()
@@ -2477,7 +2488,8 @@ export const register: Register = (on, options) => {
     if (off) return next(e)
     const row = await next(e)
     if (e.surface !== 'terminal') return row
-    return styleRow($.ui.resolve(e), look, { site: 'AssistantMessage', isFirstOfReply: e.props.isFirstOfReply, xp: xpFor(e.requestId, e.props.isFirstOfReply) }, row) as RenderElement
+    const conclusion = e.props.isFirstOfReply && isFinalAnswer(e.props.text)
+    return styleRow($.ui.resolve(e), look, { site: 'AssistantMessage', isFirstOfReply: e.props.isFirstOfReply, xp: xpFor(e.requestId, e.props.isFirstOfReply), ...(conclusion && { conclusion }) }, row) as RenderElement
   })
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
     if (off) return next(e)

@@ -155,3 +155,24 @@ test('the tabs carry the actions F1-F7 are bound to, first tab first', async ($,
   expect(tabs.map(n => n.props.hotkey)).toEqual(['1', '2', '3', '4', '5', '6', '7'])
   await pane.unmount()
 })
+
+test('the message a finished turn answered with is drawn under a Conclusion header; an earlier one gets the grey rule', async ($, on) => {
+  base(on, { mix: { colors: 'arcade', motion: 'arcade' } })
+  on('prompt.submit', async (_$: unknown, e: any) => ({ text: e.text }) as never)
+  on('ui.invalidate', async () => ({ value: undefined }) as never)
+  await start($)
+  await $.prompt.submit({ text: 'fix the cards', origin: { kind: 'composer' }, wait: false } as never)
+  await $.turn.start({ text: 'fix the cards', turnId: 't1' })
+  const final = 'The cards now keep their titles: the frame is drawn under the row.'
+  await $.turn.complete({ turnId: 't1', answer: final, reason: 'answer', durationMs: 1000 } as never)
+  const draw = async (text: string) => {
+    const m = await $.ui.mount({ plugin: 'ops-control', surface: 'terminal', component: 'AssistantMessage', requestId: 'm-' + text.length, props: { text, isFirstOfReply: true } } as never)
+    const strings = walk(await m.drawn()).filter((n: unknown) => typeof n === 'string') as string[]
+    await m.unmount()
+    return strings
+  }
+  expect(await draw(final)).toContain('Conclusion')
+  const earlier = await draw('Checking how the card draws its frame first.')
+  expect(earlier).not.toContain('Conclusion')
+  expect(earlier.some(t => /^─+$/.test(t))).toBe(true)
+})

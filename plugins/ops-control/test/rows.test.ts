@@ -1,13 +1,17 @@
 import { test, expect } from 'claude-code/testing'
-import { styleRow, type RowInput } from '../hooks/rows.tsx'
+import { DIVIDER_GREY, styleRow, type RowInput } from '../hooks/rows.tsx'
 import { resolveLook, type Look } from '../hooks/packs.ts'
 
 const els = { Box: 'Box', Text: 'Text' }
 const ENGINE = { type: 'engine', ref: 7 }
 const look = (n: string) => resolveLook({ colors: n, motion: n }, {}, {}).look
 const walk = (n: any, out: any[] = []): any[] => { if (n && typeof n === 'object') { out.push(n); for (const c of n.children ?? []) walk(c, out) } return out }
-const text = (n: any) => walk(n).flatMap(x => (x.children ?? []).filter((c: unknown) => typeof c === 'string')).join('')
+// the rule opening a reply has its own test below; the style tests read the row without it
+const fullText = (n: any) => walk(n).flatMap(x => (x.children ?? []).filter((c: unknown) => typeof c === 'string')).join('')
+const text = (n: any) => fullText(n).replace(/[─═]{20,}/g, '')
 const hasEngine = (n: any) => walk(n).includes(ENGINE)
+// the first Text of a row that isn't the rule opening a reply
+const firstText = (n: any) => walk(n).find(x => x.type === 'Text' && !/^[─═]{20,}$/.test((x.children ?? []).join('')))
 const inner = (n: any) => (n.props?.marginLeft === 1 && n.children?.length === 1 ? n.children[0] : n)
 const tool = (o: Partial<Extract<RowInput, { site: 'ToolUse' }>> = {}): RowInput => ({ site: 'ToolUse', tool: 'Read', input: { file_path: '/r/src/auth.ts' }, isRunning: false, isErrored: false, isInterrupted: false, ...o })
 const user = (o: Partial<Extract<RowInput, { site: 'UserMessage' }>> = {}): RowInput => ({ site: 'UserMessage', text: 'fix the test', isExpanded: false, own: true, ...o })
@@ -97,7 +101,7 @@ test('arcade: a pink triangle marks your prompt, a cyan diamond marks the reply,
   expect(hasEngine(u)).toBe(true)
   const a = styleRow(els, l, asst(), ENGINE)
   expect(text(a)).toBe('◆ ')
-  expect(walk(a).find(x => x.type === 'Text')?.props.color).toBe(c.read)
+  expect(firstText(a)?.props.color).toBe(c.read)
   expect(bar(a)).toBeUndefined()
   expect(bordered(a)).toBe(false)
   expect(text(styleRow(els, l, asst(false), ENGINE))).toBe('  ')
@@ -159,7 +163,7 @@ test('retro: bold [YOU] and [CLAUDE] tags, engine indented 3', async () => {
   expect(walk(u).find(n => n.type === 'Text')?.props.bold).toBe(true)
   const first = styleRow(els, l, { site: 'AssistantMessage', isFirstOfReply: true }, ENGINE)
   expect(text(first)).toBe('[CLAUDE]')
-  expect(walk(first).find(n => n.type === 'Text')?.props.bold).toBe(true)
+  expect(firstText(first)?.props.bold).toBe(true)
   const pad = (n: any) => walk(n).find(x => x.props?.paddingLeft)?.props.paddingLeft
   expect(pad(first)).toBe(3)
   expect(pad(styleRow(els, l, { site: 'AssistantMessage', isFirstOfReply: false }, ENGINE))).toBe(3)
@@ -188,7 +192,7 @@ test('non-classic styles indent every row one column, classic does not', async (
     for (const r of rows) {
       const s = styleRow(els, l, r, ENGINE) as any
       expect([style, r.site, s.type, s.props.marginLeft, s.props.flexDirection]).toEqual([style, r.site, 'Box', 1, 'column'])
-      expect(s.children).toHaveLength(1)
+      expect(s.children.filter(Boolean)).toHaveLength(r.site === 'AssistantMessage' && r.isFirstOfReply ? 2 : 1)
     }
   }
   const cl: Look = { ...look('arcade'), rows: 'classic' }
@@ -330,4 +334,28 @@ test('slab: the first block of a reply gets an accent rule on its margin line, l
   expect(text(rule)).toBe('────────')
   expect(hasEngine(first)).toBe(true)
   expect(inner(styleRow(els, l, asst(false), ENGINE))).toBe(ENGINE)
+})
+
+const texts = (n: any): string[] => walk(n).filter(x => x?.type === 'Text').map(x => (x.children ?? []).join(''))
+
+test('a grey rule opens each reply message; a turn\'s final answer gets a double accent rule and a Conclusion title', async () => {
+  const l = look('arcade')
+  const opener = (row: RowInput) => texts(styleRow(els, l, row, ENGINE)).filter(t => /^[─═]+$|^Conclusion$/.test(t))
+  // a message that opens a reply: one grey rule above it
+  const plain = styleRow(els, l, { site: 'AssistantMessage', isFirstOfReply: true }, ENGINE) as any
+  const rule = walk(plain).find(x => x?.type === 'Text' && /^─+$/.test((x.children ?? []).join('')))
+  expect(rule.props.color).toBe(DIVIDER_GREY)
+  expect(opener({ site: 'AssistantMessage', isFirstOfReply: true })).toHaveLength(1)
+  // a block inside a reply, a tool row, a prompt: no rule
+  expect(opener({ site: 'AssistantMessage', isFirstOfReply: false })).toEqual([])
+  expect(opener(tool())).toEqual([])
+  expect(opener(user())).toEqual([])
+  // the final answer: two double rules in the accent, then the title, and the message itself below
+  const fin = styleRow(els, l, { site: 'AssistantMessage', isFirstOfReply: true, conclusion: true }, ENGINE) as any
+  const shown = opener({ site: 'AssistantMessage', isFirstOfReply: true, conclusion: true })
+  expect(shown.map(t => t[0])).toEqual(['═', '═', 'C'])
+  expect(walk(fin).filter(x => x?.type === 'Text' && /^═+$/.test((x.children ?? []).join(''))).every(x => x.props.color === l.theme.colors.accent)).toBe(true)
+  expect(hasEngine(fin)).toBe(true)
+  // classic keeps Claude Code's own look
+  expect(texts(styleRow(els, look('classic'), { site: 'AssistantMessage', isFirstOfReply: true }, ENGINE))).toEqual([])
 })
