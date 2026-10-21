@@ -2,6 +2,11 @@
 
 Releases of the ops-control marketplace. Version numbers follow [semantic versioning](https://semver.org); each release is a git tag.
 
+## [1.0.3] - 2026-10-21
+
+- Ops Control: character quotes up to 80 characters over a three-row bubble, new Gojo quotes, and the suite green again (status-entry tests match this copy's hidden entry, music redraw fixture, pack skill name, status line script folder)
+- Ops Control: a time-left guess on the work bar (milestone pace, task list, past requests), /subtask fork rows with their runs in the Agents tab, no work-bar headline without milestones, and the status line taken over only on /ops statusline on
+
 ## [1.0.2] - 2026-10-20
 
 - Ops Control: a box around each reply in every look, plain tool rows, file diffs folded behind a changes toggle, and the life bar in every look
