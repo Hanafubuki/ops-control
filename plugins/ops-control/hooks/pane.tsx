@@ -1,5 +1,5 @@
 import type { ContextCategoryKind } from 'claude-code'
-import { normalizeModel, planFold, type Agent, type Model, type PlanItem } from './model.ts'
+import { normalizeModel, planFold, runsOf, type Agent, type Model, type PlanItem } from './model.ts'
 import { legendRows, stackBar, type Heavy } from './ctxchart.ts'
 import { brailleArea, chartTop, markBar, outlook, tokensK } from './trend.ts'
 import { planOrder } from './tasks.ts'
@@ -251,7 +251,16 @@ function diff(m: Model, t: Theme, v: PaneView, w: number, compact: boolean, limi
 function agents(m: Model, t: Theme, v: PaneView, w: number, compact: boolean, now: number, limit: number, border: Border): Part {
   const c = t.colors, live = m.agents.filter(a => a.state === 'running').length, iw = boxInner(w)
   const nameOf = (a: Agent) => v.names?.[a.key] ?? a.name
-  const open = v.agent === MAIN_AGENT ? MAIN_AGENT : m.agents.find(a => a.key === v.agent)
+  if (v.agent === MAIN_AGENT) return agentDetail(MAIN_AGENT, m, t, v, w, compact, now, limit, border)
+  // "<key>#run:<n>" opens one of the runs a fork row held; a row that held several opens their list first
+  const [openKey, runAt] = (v.agent ?? '').split(RUN_MARK) as [string, string | undefined]
+  const open = m.agents.find(a => a.key === openKey)
+  if (open && runAt !== undefined) {
+    const runs = runsOf(open), at = Number(runAt)
+    const run = runs[at]
+    if (run) return agentDetail({ ...open, ...run, runs: undefined }, m, t, v, w, compact, now, limit, border, { key: 'agent-back', label: '‹ All runs', hotkey: 'q', target: open.key }, runs.length > 1 ? `run ${at + 1} of ${runs.length}` : undefined)
+  }
+  if (open?.runs?.length) return agentRuns(open, t, v, w, compact, now, limit, border)
   if (open) return agentDetail(open, m, t, v, w, compact, now, limit, border)
   const spin = v.reduced ? '◌' : SPIN[Math.floor(now / 90) % SPIN.length]!
   const body: Seg[][] = []
@@ -273,7 +282,9 @@ function agents(m: Model, t: Theme, v: PaneView, w: number, compact: boolean, no
     const mark: Seg = { text: running ? spin : '✓', color: running ? c.agent : c.pass }
     if (compact) { keys.push([body.length, a.key]); body.push(fit([{ text: ` ◆ ${nameOf(a)} `, color: c.agent, bold: true }, mark, { text: ' ' + (running ? a.now ?? a.task : a.task), color: running ? c.read : c.dim }], w)); continue }
     body.push([])
-    const when = `${secs((a.endedAt ?? now) - a.startedAt)} · ${k(a.tokens)} `
+    // a fork row that held several /subtask runs says how many; opening it lists them
+    const held = a.runs?.length ? `${a.runs.length + 1} subtasks · ` : ''
+    const when = `${held}${secs((a.endedAt ?? now) - a.startedAt)} · ${k(a.tokens)} `
     keys.push([body.length, a.key])
     body.push(spread([{ text: '◆ ' + nameOf(a), color: c.agent, bold: true }], [{ text: when, color: c.dim }, mark], iw, t))
     body.push(fit([{ text: '  ' + a.task, color: c.text }], iw))
@@ -290,8 +301,43 @@ function agents(m: Model, t: Theme, v: PaneView, w: number, compact: boolean, no
   return { rows, n: body.length, links: linksAt(rows, 1, w >= MIN_BOX) }
 }
 
-// One agent in full: what it was asked, what it is doing, and its latest steps, newest first.
-function agentDetail(a: Agent | typeof MAIN_AGENT, m: Model, t: Theme, v: PaneView, w: number, compact: boolean, now: number, limit: number, border: Border): Part {
+// The link id of one of a row's runs: the row's key, RUN_MARK, the run's place among runsOf(row)
+export const RUN_MARK = '#run:'
+
+// A fork row that held several /subtask runs: each run, the newest first, opens it in full.
+function agentRuns(a: Agent, t: Theme, v: PaneView, w: number, compact: boolean, now: number, limit: number, border: Border): Part {
+  const c = t.colors, iw = compact ? w : boxInner(w), lead = compact ? '' : ' '
+  const name = v.names?.[a.key] ?? a.name
+  const spin = v.reduced ? '◌' : SPIN[Math.floor(now / 90) % SPIN.length]!
+  const runs = runsOf(a)
+  const body: Seg[][] = []
+  const keys: [number, string][] = []
+  body.push(fit([{ text: `${lead}${runs.length} subtasks ran here`, color: c.dim }], iw))
+  for (let at = runs.length - 1; at >= 0; at--) {
+    const run = runs[at]!, running = run.state === 'running'
+    const steps = run.milestones ?? [], done = steps.filter(x => x.status === 'completed').length
+    const mark: Seg = { text: running ? spin : '✓', color: running ? c.agent : c.pass }
+    body.push([])
+    keys.push([body.length, a.key + RUN_MARK + at])
+    body.push(spread([{ text: `${lead}${at + 1}. ${run.task || 'subtask'}`, color: c.text, bold: true }], [{ text: `${secs((run.endedAt ?? now) - run.startedAt)} · ${k(run.tokens)} `, color: c.dim }, mark], iw, t))
+    const about = [steps.length ? `${done}/${steps.length} milestones` : '', `${run.log?.length ?? 0} steps`].filter(Boolean).join(' · ')
+    body.push(fit([{ text: `${lead}   ${running && run.now ? run.now : about}`, color: running ? c.read : c.dim }], iw))
+  }
+  const nav: NavButton[] = [{ key: 'agent-back', label: '‹ All agents', hotkey: 'q' }]
+  const linksAt = (rows: Seg[][], first: number, edge: boolean): RowLink[] =>
+    keys.flatMap(([i, id]) => { const row = rows[first + i]; return row ? [{ row, id, lead: edge ? 1 : 0, tail: edge ? 2 : 0 }] : [] })
+  const right = `${runs.length} subtasks`
+  if (compact) {
+    const capped = cap([fit([{ text: `${name} · ${right}`, color: c.agent }], w), ...body], t, w, 0, Math.max(2, limit - 1)).map(row => fit(row, w))
+    return { rows: capped, n: -1, nav, links: linksAt(capped, 1, false) }
+  }
+  const rows = section(name.toUpperCase(), right, body, w, t, border)
+  return { rows, n: body.length, nav, links: linksAt(rows, 1, w >= MIN_BOX) }
+}
+
+// One agent in full: what it was asked, what it is doing, and its latest steps, newest first. `back` replaces the
+// button back to all agents (a run goes back to its row's runs), `which` says which run it is.
+function agentDetail(a: Agent | typeof MAIN_AGENT, m: Model, t: Theme, v: PaneView, w: number, compact: boolean, now: number, limit: number, border: Border, back?: NavButton, which?: string): Part {
   const c = t.colors, iw = compact ? w : boxInner(w), lead = compact ? '' : ' '
   const main = a === MAIN_AGENT
   const name = main ? v.mainName ?? 'Main session' : v.names?.[a.key] ?? a.name
@@ -328,8 +374,8 @@ function agentDetail(a: Agent | typeof MAIN_AGENT, m: Model, t: Theme, v: PaneVi
   body.push([], heading(`Steps · ${log.length}`))
   if (!log.length) body.push([{ text: lead + 'Nothing yet.', color: c.dim }])
   for (const st of [...log].reverse()) body.push(spread([{ text: lead + st.text, color: c.text }], [{ text: `${secs(now - st.at)} ago`, color: c.dim }], iw, t))
-  const nav: NavButton[] = [{ key: 'agent-back', label: '‹ All agents', hotkey: 'q' }]
-  const right = main ? (running ? 'working' : 'idle') : `${running ? 'running' : 'done'} · ${secs((a.endedAt ?? now) - a.startedAt)} · ${k(a.tokens)}`
+  const nav: NavButton[] = [back ?? { key: 'agent-back', label: '‹ All agents', hotkey: 'q' }]
+  const right = main ? (running ? 'working' : 'idle') : `${which ? which + ' · ' : ''}${running ? 'running' : 'done'} · ${secs((a.endedAt ?? now) - a.startedAt)} · ${k(a.tokens)}`
   if (compact) return { rows: cap([fit([{ text: `${name} · ${right}`, color: main ? c.accent : c.agent }], w), ...body], t, w, 0, Math.max(2, limit - 1)).map(row => fit(row, w)), n: -1, nav }
   return { rows: section(name.toUpperCase(), right, body, w, t, border), n: body.length, nav }
 }
@@ -673,11 +719,15 @@ export function statusRows(model: Model, base: Theme, width: number, now: number
   const m = normalizeModel(model)
   const t = look?.theme ?? base, c = t.colors
   const live = m.agents.filter(a => a.state === 'running')
-  const first: Seg[] = [{ text: `${m.act.glyph} ${m.act.label}`, color: toneColor(t, m.act.tone), bold: true }, ...comboSegs(m.combo, look)]
+  // what Claude does is the work bar's and the spinner's to say; the status box names it only while it needs you
+  const act: Seg[] = m.needsYou ? [{ text: `${m.act.glyph} ${m.act.label}`, color: toneColor(t, m.act.tone), bold: true }] : []
+  const combo = comboSegs(m.combo, look)
+  const first: Seg[] = act.length ? [...act, ...combo] : combo.map((x, i) => (i === 0 ? { ...x, text: x.text.trimStart() } : x))
   // the level never crowds the activity label: a row it does not fit stays as it was
-  const withLevel = m.xp === undefined ? first : [...first, { text: '  ', color: c.text }, ...levelSegs(m.xp, t, 10)]
+  const withLevel = m.xp === undefined ? first : [...first, ...(first.length ? [{ text: '  ', color: c.text }] : []), ...levelSegs(m.xp, t, 10)]
+  const top = visibleLength(withLevel) <= width ? withLevel : first
   const rows: Seg[][] = [
-    visibleLength(withLevel) <= width ? withLevel : first,
+    ...(top.length ? [top] : []),
     ...(meter ?? [lifeRow(m, t, width, now)]),
   ]
   if (live.length) rows.push([{ text: `◆ ${live.map(a => names?.[a.key] ?? a.name).join(', ')} working`, color: c.agent }])

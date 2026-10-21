@@ -62,6 +62,18 @@ Under the tabs, a status box shows the current action, the running subagents, an
 
 Two rows above the prompt, docked pane or not. The first says what Claude is doing toward the work's milestones, the step it is at and how long that step has run, with the open issues and running subagents at its right end. The second shows the milestones as a track (`●━●━◉─○─○ 2/5`), the context meter with the auto-compact point marked, and the 5-hour limit with the time to its reset. Claude reports the milestones through Ops Control's own `milestones` tool, or Control Room's when that plugin is on.
 
+**Time left.** While Claude works, the track ends with a guess at how long the work still needs: `●━●━◉─○ 2/4 · ETA ~6m`. Ops Control notes when each milestone starts and finishes (Claude doesn't supply these times), takes the time from the first start to the latest finish, divides it by the milestones done, and multiplies by the ones still open. The milestone at work counts minus what it has already run, but never less than a fifth of that average. Until a milestone is done it shows `ETA --`. While a milestone is waiting or blocked, and between turns, nothing is shown, because the headline already says what the work waits on. It's only an estimate from the pace so far: a long test run or a large last milestone makes it jump. In a narrow bar the `ETA` label drops and only `· ~6m` stays.
+
+Without milestones there's still an estimate, from the best source available:
+
+| The work has | The estimate comes from |
+|---|---|
+| Milestones | their pace, as above |
+| Only Claude's task list | the same pace, from when each task started and finished as the bar saw them |
+| Neither, or steps with none done yet | past finished requests, from this session and the up to 60 newest saved sessions (read once per session from `~/.claude/ops-control/requests/`): of the ones that ran longer than this one has so far, the middle one's time, minus the time already run. Drawn dim, since it's looser. It needs at least 3 finished requests, and shows `ETA --` once this request has run longer than all of them. |
+
+With no steps the bar shows the estimate on its own (`ETA ~4m`), next to the context meter.
+
 `/ops setup bar band` swaps it for the one-row band: while Claude works, the current action, running subagents, plan progress, and five hearts for the context left, each worth 20% of the window.
 
 <img src="docs/assets/band.png" alt="The band reading: 1 test failed, 1 subagent, five hearts">

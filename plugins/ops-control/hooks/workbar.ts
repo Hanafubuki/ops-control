@@ -1,6 +1,6 @@
 // The work bar over the prompt, two rows: what Claude is doing toward the work's milestones (a headline with the
-// step it is at and how long that step has run), then the instruments: the milestones as a track, the context
-// meter with the auto-compact point marked, and the 5-hour limit. JSX-free, so it tests on plain models.
+// step it is at and how long that step has run), then the instruments: the milestones as a track with the time
+// still needed, the context meter with the auto-compact point marked, and the 5-hour limit. JSX-free, so it tests on plain models.
 import type { Model } from './model.ts'
 import type { Milestone, MilestoneStatus, Requests } from './requests.ts'
 import { currentMilestone, openIssues } from './requests.ts'
@@ -9,6 +9,7 @@ import type { Theme } from './themes.ts'
 import type { Look } from './packs.ts'
 import type { Meter } from './setup.ts'
 import { toneFor } from './setup.ts'
+import { eta, type Eta } from './eta.ts'
 import { comboSegs, fit, toneColor, visibleLength, type Seg } from './layout.tsx'
 
 export type WorkInput = {
@@ -20,6 +21,8 @@ export type WorkInput = {
   issues?: number
   // when the current milestone began, for the time it has run
   since?: number
+  // the time left from how long the session's past requests ran, for work whose steps cannot tell (eta.ts historyEta)
+  history?: Eta
   // the auto-compact point, in percent of the window: the meter's notch
   marker?: number
   meter: Meter
@@ -118,7 +121,10 @@ function instruments(t: Theme, w: WorkInput, tier: (typeof TIERS)[number]): { le
   const left: Segment[] = [], right: Segment[] = []
   if (w.steps.length) {
     const done = w.steps.filter(s => s.status === 'completed').length, all = done === w.steps.length
-    left.push({ priority: 1, segs: [...label('WORK'), ...track(t, w.steps, tier.stops), { text: ` ${done}/${w.steps.length}`, color: all ? c.pass : c.text, bold: true }] })
+    left.push({ priority: 1, segs: [...label('WORK'), ...track(t, w.steps, tier.stops), { text: ` ${done}/${w.steps.length}`, color: all ? c.pass : c.text, bold: true }, ...etaSegs(t, w, tier.labels)] })
+  } else {
+    const segs = etaSegs(t, w, tier.labels)
+    if (segs.length) left.push({ priority: 1, segs: [...label('ETA'), ...segs.slice(1)] })
   }
   const pct = Math.max(0, Math.min(100, Math.round(m.ctxPercent))), tone = c[toneFor(pct, w.meter)]
   const cells = meterCells(pct / 100, tier.meter, w.marker === undefined ? undefined : w.marker / 100)
@@ -140,6 +146,22 @@ function instruments(t: Theme, w: WorkInput, tier: (typeof TIERS)[number]): { le
     })
   }
   return { left, right }
+}
+
+// While Claude works: the time the steps still need at their pace so far, else as long as past requests ran (dim),
+// `--` (labels only) until either can tell. Nothing while a step waits or all are done: the headline says so.
+export function timeLeft(w: WorkInput): Eta | undefined {
+  if (!w.model.working) return undefined
+  const own = w.steps.length ? eta(w.steps, w.now) : { kind: 'unknown' as const }
+  return own?.kind === 'unknown' && w.history?.kind === 'left' ? w.history : own
+}
+
+function etaSegs(t: Theme, w: WorkInput, labels: boolean): Seg[] {
+  const c = t.colors, e = timeLeft(w)
+  if (!e || (e.kind === 'unknown' && !labels)) return []
+  const lead: Seg = { text: labels ? ' · ETA ' : ' · ', color: c.dim }
+  if (e.kind === 'unknown') return [lead, { text: '--', color: c.dim }]
+  return [lead, { text: e.ms < 60_000 ? '<1m' : `~${countdown(e.ms)}`, color: e.from === 'history' ? c.dim : c.text }]
 }
 
 const width = (xs: Segment[]) => xs.reduce((n, x) => n + visibleLength(x.segs), 0) + GAP * Math.max(0, xs.length - 1)
@@ -174,6 +196,8 @@ export function instrumentRow(t: Theme, w: WorkInput): Seg[] {
 }
 
 // The headline row: the state, then the step and its time dim; chips to the right take at most 45% of the row.
+// Work with no milestones has no headline (the spinner already says what Claude does), save a permission waiting:
+// the chips alone are right-aligned, and a row with neither is empty, which the band leaves out.
 export function headlineRow(t: Theme, w: WorkInput): Seg[] {
   const c = t.colors, h = headline(t, w), m = w.model
   const live = m.agents.filter(a => a.state === 'running').length
@@ -189,13 +213,15 @@ export function headlineRow(t: Theme, w: WorkInput): Seg[] {
     if (visibleLength(next) > Math.floor(w.columns * 0.45)) break
     right.splice(0, right.length, ...next)
   }
-  const left: Seg[] = [
+  const shown = w.steps.length > 0 || !!m.needsYou
+  const left: Seg[] = shown ? [
     { text: h.glyph.padEnd(INDENT), color: h.color },
     { text: h.text, color: h.dim ? c.dim : c.text, bold: h.bold },
     ...(h.detail ? [{ text: ` · ${h.detail}`, color: c.dim }] : []),
-  ]
+  ] : []
+  if (!shown && !right.length) return []
   const room = w.columns - (right.length ? visibleLength(right) + 3 : 0)
-  const l = fit(left, Math.max(INDENT + 1, room))
+  const l = shown ? fit(left, Math.max(INDENT + 1, room)) : []
   if (!right.length) return l
   return [...l, { text: ' '.repeat(Math.max(1, w.columns - visibleLength(l) - visibleLength(right))), color: c.text }, ...right]
 }
@@ -203,7 +229,8 @@ export function headlineRow(t: Theme, w: WorkInput): Seg[] {
 // The work the bar follows: the newest request's milestones (a prompt taken into another request's turn has that
 // turn's), else Claude's task list while some task is still open. A new request starts with an empty track, so the
 // last task's milestones leave the bar as soon as the next request is sent.
-export function workOf(rs: Requests | undefined, plan: readonly PlanItem[]): { steps: Milestone[]; objective?: string } {
+// tasks: the steps are Claude's task list, which carries no times; the caller stamps them (requests.ts stamped).
+export function workOf(rs: Requests | undefined, plan: readonly PlanItem[]): { steps: Milestone[]; objective?: string; tasks?: true } {
   const list = rs?.list ?? []
   const r = list.at(-1)
   if (r) {
@@ -212,7 +239,7 @@ export function workOf(rs: Requests | undefined, plan: readonly PlanItem[]): { s
     if (from) return { steps: from.milestones, ...((from.objective ?? r.objective) && { objective: from.objective ?? r.objective }) }
   }
   if (!plan.some(p => p.status !== 'completed')) return { steps: [] }
-  return { steps: plan.map(p => ({ title: p.title, status: p.status })) }
+  return { steps: plan.map(p => ({ title: p.title, status: p.status })), tasks: true }
 }
 
 // The open issues of the request at work: the newest one, or the one whose turn took it in.

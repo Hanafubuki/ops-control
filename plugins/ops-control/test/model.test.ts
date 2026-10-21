@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { initialModel, applyEvent, normalizeModel, bandVisible, isBusy, mergeCounts, planFold, type Ev, type Model } from '../hooks/model.ts'
+import { forkTask, isForkId, initialModel, applyEvent, normalizeModel, bandVisible, isBusy, mergeCounts, planFold, type Ev, type Model } from '../hooks/model.ts'
 
 const run = (evs: Ev[]) => evs.reduce(applyEvent, initialModel())
 
@@ -351,4 +351,31 @@ test('a spawn no Agent call announced (a /subtask fork) joins the agents; an Age
     { type: 'agent-bind', toolUseId: 'w1', agentId: 'wb', at: 1, name: 'review', task: 'perf' },
   ])
   expect(wf.agents.map(a => a.agentId)).toEqual(['wa', 'wb'])
+})
+
+test('a fork\'s task comes from its agent id', async () => {
+  expect(forkTask('acount-the-files-d7b91f2d5eb71abb')).toBe('count the files')
+  expect(forkTask('awill-this-command-e44357cc46348aad')).toBe('will this command')
+  expect(isForkId('acount-the-files-d7b91f2d5eb71abb')).toBe(true)
+  expect(isForkId('a0123456789abcdef')).toBe(false)
+})
+
+test('a new fork takes over the row of a fork that is done; one still running keeps its own', async () => {
+  const bind = (agentId: string, at: number, task: string): Ev => ({ type: 'agent-bind', toolUseId: '', agentId, at, name: 'fork', task, fork: true })
+  let m = applyEvent(initialModel(), bind('afirst-task-0000000000000001', 1, 'first task'))
+  // an Agent call's subagent that is done is never taken over
+  m = applyEvent(m, { type: 'tool-start', at: 2, tool: 'Agent', toolUseId: 'call-1', input: { description: 'scout', subagent_type: 'Explore' } })
+  m = applyEvent(m, { type: 'agent-bind', toolUseId: 'call-1', agentId: 'ag-1' })
+  m = applyEvent(m, { type: 'agent-done', at: 3, agentId: 'ag-1' })
+  m = applyEvent(m, { type: 'agent-done', at: 4, agentId: 'afirst-task-0000000000000001' })
+  m = applyEvent(m, bind('asecond-task-0000000000000002', 5, 'second task'))
+  expect(m.agents.map(a => [a.key, a.agentId, a.task, a.state])).toEqual([
+    ['spawn:afirst-task-0000000000000001', 'asecond-task-0000000000000002', 'second task', 'running'],
+    ['call-1', 'ag-1', 'scout', 'done'],
+  ])
+  // the row starts afresh: no steps, end or tokens of the fork before it
+  expect([m.agents[0]!.startedAt, m.agents[0]!.endedAt, m.agents[0]!.log]).toEqual([5, undefined, undefined])
+  // while that one runs, the next fork gets a row of its own
+  m = applyEvent(m, bind('athird-task-0000000000000003', 6, 'third task'))
+  expect(m.agents.map(a => a.task)).toEqual(['second task', 'scout', 'third task'])
 })

@@ -7,9 +7,16 @@ export type Act = { glyph: string; label: string; kind?: string; tone: 'text' | 
 // One thing an agent did, for the Agents tab's detail view: the tool's glyph and label, and when.
 export type Step = { at: number; text: string }
 // prompt: the start of what the agent was asked, from its Agent call; log: its latest steps, oldest first
-export type Agent = { key: string; agentId?: string; name: string; task: string; state: 'running' | 'done'; startedAt: number; endedAt?: number; tokens?: number; now?: string; prompt?: string; log?: Step[]
+// fork: a /subtask fork, whose row the next fork takes over once it is done; runs: the forks the row held before, oldest first
+export type Agent = { key: string; agentId?: string; name: string; task: string; state: 'running' | 'done'; startedAt: number; endedAt?: number; tokens?: number; now?: string; prompt?: string; log?: Step[]; fork?: true; runs?: AgentRun[]
   // the context its last model request filled, in percent of the window; the milestones it last reported, and their objective
   ctxPercent?: number; milestones?: Milestone[]; objective?: string }
+// One fork a row held: everything the Agents tab shows of an agent but the row's own name
+export type AgentRun = Omit<Agent, 'key' | 'name' | 'fork' | 'runs'>
+export const runOf = ({ key: _key, name: _name, fork: _fork, runs: _runs, ...run }: Agent): AgentRun => run
+// A row's runs, the one it holds now last
+export const runsOf = (a: Agent): AgentRun[] => [...(a.runs ?? []), runOf(a)]
+
 export type FileTouch = { path: string; add: number; del: number; how: 'edit' | 'new'; at: number }
 export type NeedsYou = { toolUseId: string; what: string; before: Act }
 export type RateLimit = { kind: string; percentUsed: number; resetsAt?: string }
@@ -48,7 +55,7 @@ export type Ev =
   | { type: 'tool-end'; at: number; tool: string; toolUseId: string; agentId?: string; input: Record<string, unknown>; isError: boolean; text: string; resultTaskId?: string; agentTokens?: number; writeType?: 'create' | 'update' }
   | { type: 'needs-you'; at: number; toolUseId: string; what: string }
   // at, name and task: the spawn's own, for an agent no Agent call announced (a /subtask fork, a workflow's agent)
-  | { type: 'agent-bind'; toolUseId: string; agentId: string; at?: number; name?: string; task?: string }
+  | { type: 'agent-bind'; toolUseId: string; agentId: string; at?: number; name?: string; task?: string; fork?: true }
   | { type: 'agent-done'; at: number; agentId: string; tokens?: number }
   // a subagent's own context, from each of its model requests, and the milestones it reports
   | { type: 'agent-context'; agentId: string; percent: number }
@@ -179,7 +186,12 @@ export function applyEvent(m: Model, ev: Ev): Model {
       }
       // a spawn no Agent call announced (a /subtask fork, a command's or a workflow's agent) joins the list here
       if (ev.at === undefined) return m
-      return { ...m, agents: [...m.agents, { key: `${ev.toolUseId || 'spawn'}:${ev.agentId}`, agentId: ev.agentId, name: ev.name || 'agent', task: ev.task ?? '', state: 'running' as const, startedAt: ev.at }] }
+      const joined: Agent = { key: `${ev.toolUseId || 'spawn'}:${ev.agentId}`, agentId: ev.agentId, name: ev.name || 'agent', task: ev.task ?? '', state: 'running' as const, startedAt: ev.at, ...(ev.fork && { fork: true as const }) }
+      // a new fork takes over the row of the latest fork that is done, keeping its key and so its name, and keeps the
+      // fork it held among the row's runs
+      const finished = ev.fork ? m.agents.findLastIndex(a => a.fork && a.state === 'done') : -1
+      if (finished < 0) return { ...m, agents: [...m.agents, joined] }
+      return { ...m, agents: m.agents.map((a, i) => (i === finished ? { ...joined, key: a.key, runs: [...(a.runs ?? []), runOf(a)] } : a)) }
     }
     case 'agent-context': return { ...m, agents: m.agents.map(a => a.agentId === ev.agentId ? { ...a, ctxPercent: ev.percent } : a) }
     case 'agent-milestones': return { ...m, agents: m.agents.map(a => a.agentId === ev.agentId ? { ...a, milestones: ev.milestones, objective: ev.objective } : a) }
@@ -239,4 +251,12 @@ export function applyEvent(m: Model, ev: Ev): Model {
       return next
     }
   }
+}
+
+// A fork's agent id: "a" + the request's first words, slugged + "-" + a hash ("acount-the-files-d7b91f2d5eb71abb").
+export const isForkId = (agentId: string) => /^a[a-z0-9-]*[a-z][a-z0-9-]*-[0-9a-f]{16}$/.test(agentId)
+
+// A fork's task from its agent id, when its turn carries no request.
+export function forkTask(agentId: string): string {
+  return agentId.replace(/^a/, '').replace(/-[0-9a-f]{8,}$/, '').replace(/-/g, ' ')
 }

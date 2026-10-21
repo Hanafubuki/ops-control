@@ -221,22 +221,22 @@ test('empty states', async () => {
   expect(text(tabRows(empty, T, { tab: 'plan' }, 54, false, 0)).join('\n')).toContain('No task list yet')
 })
 
-test('status rows say the action and context in words', async () => {
+test('status rows say the context and who works in words; the action shows only while it needs you', async () => {
   const rows = text(statusRows(M, T, 54, 0))
-  expect(rows[0]).toBe('✎ Editing src/auth.ts')
-  expect(rows[1]).toMatch(/^HP █+░+  36% context left$/)
-  expect(rows[2]).toBe('◆ scout 2 working')
+  expect(rows[0]).toMatch(/^HP █+░+  36% context left$/)
+  expect(rows[1]).toBe('◆ scout 2 working')
+  const asking = text(statusRows({ ...M, needsYou: { toolUseId: 't', what: 'Bash rm', before: M.act }, act: { glyph: '!', label: 'Needs you: Bash rm', tone: 'fail' } }, T, 54, 0))
+  expect(asking[0]).toBe('! Needs you: Bash rm')
 })
 
-test('the first status row carries Lv N and a ten-cell bar when it fits, and drops them when it does not', async () => {
+test('the first status row carries Lv N and a ten-cell bar', async () => {
   const row = (m: Partial<Model>, width = 54) => text(statusRows({ ...M, ...m }, T, width, 0))[0]
-  expect(row({})).toBe('✎ Editing src/auth.ts')
-  expect(row({ xp: 180 })).toBe('✎ Editing src/auth.ts  Lv 2 ▰▰▰▰▱▱▱▱▱▱')
-  expect(row({ xp: 180 }, 30)).toBe('✎ Editing src/auth.ts')
+  expect(row({})).toMatch(/^HP /)
+  expect(row({ xp: 180 })).toBe('Lv 2 ▰▰▰▰▱▱▱▱▱▱')
 })
 
 test('the life row shows the tighter usage window, then spend, then context', async () => {
-  const life = (m: Partial<Model>, now = 0) => text(statusRows({ ...M, ...m }, T, 54, now))[1]
+  const life = (m: Partial<Model>, now = 0) => text(statusRows({ ...M, ...m }, T, 54, now))[0]
   const limits = [{ kind: 'five_hour', percentUsed: 30, resetsAt: '1970-01-01T05:00:00Z' }, { kind: 'seven_day', percentUsed: 62.4 }]
   expect(life({ limits, costUsd: 4.2 })).toMatch(/^HP █+░+  38% weekly limit left$/)
   expect(life({ limits: [{ ...limits[0]!, percentUsed: 90 }, limits[1]!] })).toMatch(/^HP █+░+  10% 5h limit left$/)
@@ -335,10 +335,10 @@ test('an outfit makes the strip two rows taller', async () => {
 
 test('HP and COMBO show in the status box under an arcade look', async () => {
   const rows = text(statusRows({ ...M, combo: 4 }, T, 54, 0, arcade))
-  expect(rows[0]).toContain('COMBO x4')
+  expect(rows[0]).toBe('COMBO x4 ')
   expect(rows[1]).toContain('HP ')
   expect(rows[1]).toContain('36% context left')
-  expect(text(statusRows({ ...M, limits: [{ kind: 'seven_day', percentUsed: 20 }] }, T, 54, 0, arcade))[1]).toContain('80% weekly limit left')
+  expect(text(statusRows({ ...M, limits: [{ kind: 'seven_day', percentUsed: 20 }] }, T, 54, 0, arcade))[0]).toContain('80% weekly limit left')
 })
 
 test('renderPane draws seven tab buttons with hotkeys 1-7 and presses switch tab', async () => {
@@ -701,4 +701,34 @@ test('the context warning follows meter.danger', () => {
 test('tabs follow the setup and an open hidden tab falls to the first shown one', () => {
   expect(visibleTabs(undefined, 'agents')).toEqual({ tabs: [['plan', 'Plan'], ['context', 'Context'], ['guardrails', 'Guardrails'], ['agents', 'Agents'], ['diff', 'Diff'], ['music', 'Music'], ['settings', 'Settings']], tab: 'agents' })
   expect(visibleTabs(['plan', 'diff'], 'agents')).toEqual({ tabs: [['plan', 'Plan'], ['diff', 'Diff']], tab: 'plan' })
+})
+
+test('a fork row that held several /subtask runs lists them; each opens in full and goes back to the list', async () => {
+  const bind = (agentId: string, at: number, task: string) => ({ type: 'agent-bind' as const, toolUseId: '', agentId, at, name: 'fork', task, fork: true as const })
+  let m = applyEvent(initialModel(), bind('afirst-0000000000000001', 0, 'count the files'))
+  m = applyEvent(m, { type: 'agent-milestones', agentId: 'afirst-0000000000000001', milestones: [{ title: 'Count them', status: 'completed' }] })
+  m = applyEvent(m, { type: 'tool-start', at: 1000, tool: 'Bash', toolUseId: 't1', agentId: 'afirst-0000000000000001', input: { command: 'ls', description: 'List files' } })
+  m = applyEvent(m, { type: 'agent-done', at: 2000, agentId: 'afirst-0000000000000001' })
+  m = applyEvent(m, bind('asecond-0000000000000002', 3000, 'list the folders'))
+  const key = m.agents[0]!.key
+  // the Agents tab: one row that says how many subtasks it held
+  const list = tabParts(m, T, { tab: 'agents' }, 80, false, 4000)
+  expect(text(list.rows).join('\n')).toContain('2 subtasks')
+  // the row opens the list of its runs, the newest first, each one a link
+  const runs = tabParts(m, T, { tab: 'agents', agent: key }, 80, false, 4000)
+  const shown = text(runs.rows).join('\n')
+  expect(shown.indexOf('2. list the folders')).toBeLessThan(shown.indexOf('1. count the files'))
+  expect(runs.links?.map(l => l.id)).toEqual([`${key}#run:1`, `${key}#run:0`])
+  expect(runs.nav?.map(b => [b.label, b.target])).toEqual([['‹ All agents', undefined]])
+  // a finished run in full: its milestones and steps, back to the runs
+  const first = tabParts(m, T, { tab: 'agents', agent: `${key}#run:0` }, 80, false, 4000)
+  const detail = text(first.rows).join('\n')
+  expect(detail).toContain('count the files')
+  expect(detail).toContain('Count them')
+  expect(detail).toContain('List files')
+  expect(detail).toContain('run 1 of 2')
+  expect(first.nav?.map(b => [b.label, b.target])).toEqual([['‹ All runs', key]])
+  // a row that held one run opens it in full at once
+  const single = applyEvent(initialModel(), bind('aonly-0000000000000003', 0, 'just one'))
+  expect(text(tabParts(single, T, { tab: 'agents', agent: single.agents[0]!.key }, 80, false, 100).rows).join('\n')).toContain('Milestones')
 })

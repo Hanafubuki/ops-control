@@ -108,3 +108,14 @@ test('a subagent\'s bar is its own: its milestones, its context and what it does
   expect(text(instruments)).toContain('1/4')
   expect(agentWork(m, 'nobody')).toBeUndefined()
 })
+
+test('work with no milestones has no headline: the chips alone, right-aligned, or no row', () => {
+  expect(workBarRows(T, input({ model: working, steps: [] }))[1]).toEqual([])
+  const m = applyEvent(working, { type: 'tool-start', at: 1, tool: 'Agent', toolUseId: 'a', input: { description: 'scout' } })
+  const head = workBarRows(T, input({ model: m, steps: [] }))[1]
+  expect(text(head)).toMatch(/^ +◆ 1 subagent$/)
+  expect(visibleLength(head)).toBe(120)
+  // a permission waiting still says so
+  const asking = { ...working, needsYou: { toolUseId: 't', what: 'Bash rm', before: working.act } }
+  expect(text(workBarRows(T, input({ model: asking, steps: [] }))[1])).toContain('Waiting for you to approve: Bash rm')
+})

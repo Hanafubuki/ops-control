@@ -12,7 +12,8 @@ export type RequestAgent = { name: string; task: string }
 export type RequestTask = { id: string; title: string; status: PlanItem['status'] }
 // The steps Claude reports for the work: a milestones tool's (Control Room), else a progress bar's (plan-progress).
 export type MilestoneStatus = 'pending' | 'in_progress' | 'verifying' | 'waiting' | 'blocked' | 'completed' | 'failed' | 'skipped'
-export type Milestone = { title: string; status: MilestoneStatus; doing?: string; evidence?: string; blocker?: string }
+// startedAt and doneAt are when ops-control saw it start and finish (stamped, never taken from the call), for the ETA.
+export type Milestone = { title: string; status: MilestoneStatus; doing?: string; evidence?: string; blocker?: string; startedAt?: number; doneAt?: number }
 // A question Claude put to the person during the work (AskUserQuestion), with what they answered.
 export type RequestQuestion = { question: string; answer?: string }
 // A call that needs a look: one that failed (repeats of the same call count as tries of one), or one refused (a
@@ -236,7 +237,8 @@ export function agentBind(rs: Requests, toolUseId: string, agentId: string): Req
 }
 
 // denied: a hook refused the call before it ran
-export type ToolEnd = { tool: string; toolUseId: string; agentId?: string; input: Record<string, unknown>; isError: boolean; text: string; resultTaskId?: string; writeType?: 'create' | 'update'; denied?: boolean }
+// at: when the call ended, which stamps the milestones it moves; a call read back from a transcript has none.
+export type ToolEnd = { at?: number; tool: string; toolUseId: string; agentId?: string; input: Record<string, unknown>; isError: boolean; text: string; resultTaskId?: string; writeType?: 'create' | 'update'; denied?: boolean }
 
 function touchFile(files: RequestFile[], path: string, how: RequestFile['how'], add: number, del: number): RequestFile[] {
   const old = files.find(f => f.path === path)
@@ -266,6 +268,7 @@ function addWork(r: Request, ev: ToolEnd, plan: readonly PlanItem[]): Request {
     n = { ...n, milestones: readMilestones(ev.input.milestones), milestonesFrom: 'milestones', ...(objective && { objective: clip(objective, 300) }) }
   }
   if (main && PROGRESS_TOOL.test(ev.tool)) n = progressed(n, ev.input)
+  if (ev.at !== undefined && n.milestones !== r.milestones) n = { ...n, milestones: stamped(r.milestones, n.milestones, ev.at) }
   if (d.file) {
     const counts = editCounts(ev.tool, ev.input) ?? (ev.tool === 'NotebookEdit' ? { add: 0, del: 0 } : undefined)
     const how: RequestFile['how'] | undefined = ev.tool === 'Write' && ev.writeType === 'create' ? 'new' : counts ? 'edit' : undefined
@@ -316,13 +319,29 @@ const PROGRESS_TOOL = /(^|__)plan_progress$/
 const PROGRESS_STATUS: Record<string, MilestoneStatus> = { pending: 'pending', active: 'in_progress', done: 'completed', error: 'failed', skipped: 'skipped' }
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' ? v as Record<string, unknown> : {})
 
-export function readMilestones(v: unknown): Milestone[] {
+// A call's list never carries times; a saved one (times true) keeps the ones ops-control stamped.
+export function readMilestones(v: unknown, times = false): Milestone[] {
   return (Array.isArray(v) ? v : []).flatMap((m): Milestone[] => {
     const o = obj(m), title = oneLine(str(o.title))
     if (!title) return []
     const s = str(o.status) as MilestoneStatus, doing = oneLine(str(o.doing)), evidence = oneLine(str(o.evidence)), blocker = oneLine(str(o.blocker))
-    return [{ title: clip(title, 200), status: MILESTONE_STATUSES.includes(s) ? s : 'pending', ...(doing && { doing: clip(doing, 200) }), ...(evidence && { evidence: clip(evidence, 200) }), ...(blocker && { blocker: clip(blocker, 200) }) }]
+    return [{
+      title: clip(title, 200), status: MILESTONE_STATUSES.includes(s) ? s : 'pending', ...(doing && { doing: clip(doing, 200) }), ...(evidence && { evidence: clip(evidence, 200) }), ...(blocker && { blocker: clip(blocker, 200) }),
+      ...(times && typeof o.startedAt === 'number' && { startedAt: o.startedAt }), ...(times && typeof o.doneAt === 'number' && { doneAt: o.doneAt }),
+    }]
   }).slice(0, MAX_MILESTONES)
+}
+
+const STARTED: readonly MilestoneStatus[] = ['in_progress', 'verifying', 'waiting', 'blocked', 'completed']
+// The new list keeps each milestone's times from the old one (matched by title); one that starts or finishes now gets `at`.
+export function stamped(old: readonly Milestone[], next: readonly Milestone[], at: number): Milestone[] {
+  const before = new Map(old.map(m => [m.title, m]))
+  return next.map(m => {
+    const was = before.get(m.title)
+    const startedAt = was?.startedAt ?? (STARTED.includes(m.status) ? at : undefined)
+    const doneAt = m.status === 'completed' ? (was?.status === 'completed' ? was.doneAt : at) : undefined
+    return { ...m, ...(startedAt !== undefined && { startedAt }), ...(doneAt !== undefined && { doneAt }) }
+  })
 }
 
 // A progress bar's call: its stages set the steps; next, done, active, failed and state move them.
@@ -450,7 +469,7 @@ function readRequest(raw: unknown): Request | undefined {
     tasks: tasks.slice(0, MAX_TASKS),
     tools: num(o.tools),
     ...(str(o.objective) && { objective: clip(str(o.objective), 300) }),
-    milestones: readMilestones(o.milestones),
+    milestones: readMilestones(o.milestones, true),
     ...((o.milestonesFrom === 'milestones' || o.milestonesFrom === 'progress') && { milestonesFrom: o.milestonesFrom }),
     asked: arr(o.asked).flatMap((q): RequestQuestion[] => {
       const x = obj(q)

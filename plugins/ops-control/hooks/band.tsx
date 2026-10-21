@@ -48,5 +48,5 @@ export function renderBand(els: { Box: any; Text: any }, model: Model, t: Theme,
 export function renderWorkBar(els: { Box: any; Text: any }, t: Theme, w: WorkInput) {
   const { Box } = els
   const [rule, head, instruments] = workBarRows(t, w)
-  return <Box flexDirection="column">{renderSegs(els, rule, 'work-rule')}{renderSegs(els, head, 'work-head')}{renderSegs(els, instruments, 'work-instruments')}</Box>
+  return <Box flexDirection="column">{renderSegs(els, rule, 'work-rule')}{head.length ? renderSegs(els, head, 'work-head') : null}{renderSegs(els, instruments, 'work-instruments')}</Box>
 }

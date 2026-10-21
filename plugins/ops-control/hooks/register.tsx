@@ -1,6 +1,6 @@
 import type { EngineInterface, PaneOpenArgs, PromptSubmitInput, PromptSubmitResult, Register, RenderElement, RenderInput, RenderSurface, Timer } from 'claude-code'
 import type { Host } from './host.ts'
-import { initialModel, normalizeModel, applyEvent, mergeCounts, isBusy, agentsRunning, type Model, type Ev } from './model.ts'
+import { forkTask, isForkId, initialModel, normalizeModel, applyEvent, mergeCounts, isBusy, agentsRunning, type Model, type Ev } from './model.ts'
 import { approvalLabel, dialogCall, modeAsksPerson } from './events.ts'
 import { PRESETS, shown, type Theme } from './themes.ts'
 import { resolveLook, cleanOverrides, exportMix, exportName, DEFAULT_MIX, SPINNER_IDS, type Mix, type Look } from './packs.ts'
@@ -16,7 +16,7 @@ import { recordPass, unlockEgg, eggUnlocked, hintDue, EGG_HINTS, overlays, local
 import { branchOf, gitBase, rebase, refreshCounts, serial, type Repo } from './changes.ts'
 import { readDiff } from './diff.ts'
 import { loadTasks, taskListId } from './tasks.ts'
-import { adopt, agentBind, agentStart, backfill, currentMilestone, drop, endTurn, foldIn, hasQueued, initialRequests, loadSaved, normalizeRequests, readMilestones, retext, saved, settleQueued, startTurn, submit, toolEnd as requestWork, unstarted, withinSize, type Requests } from './requests.ts'
+import { adopt, agentBind, agentStart, backfill, currentMilestone, drop, endTurn, foldIn, hasQueued, initialRequests, loadSaved, normalizeRequests, readMilestones, retext, saved, stamped, settleQueued, startTurn, submit, toolEnd as requestWork, unstarted, withinSize, type Milestone, type Requests } from './requests.ts'
 import { TranscriptReader, projectFolder, readTranscript } from './backfill.ts'
 import { cacheHit, heaviest } from './ctxchart.ts'
 import { pinRows, startOpspin, wireOpspin } from './opspin.tsx'
@@ -35,6 +35,7 @@ import { tierFor } from './layout.tsx'
 import { renderBand, renderWorkBar } from './band.tsx'
 import { MILESTONES_SPEC, otherOffers, policy, recorded } from './milestones.ts'
 import { agentWork, workIssues, workOf } from './workbar.ts'
+import { MAX_EARLIER, historyEta, savedDurations } from './eta.ts'
 import { NO_SWITCHES, isSource, offNote, readGuardrails, readSwitches, toggle, verdictFor, type GuardSwitches } from './guardrails.ts'
 import { renderPane, bubbleBox, petStripCols, visibleTabs, COVER_COLS, type PaneExtra, type PaneView, type TabId } from './pane.tsx'
 import { spinnerWord, newTurnWord } from './restyle.ts'
@@ -557,6 +558,24 @@ async function loadRequests($: Engine, fresh = false) {
     try { requests = loadSaved(JSON.parse(await hostOf($).readFile(requestsFile(sessionId)))) } catch {}
   }
   void $.state.set(REQS, { requests: withinSize(requests), sid: sessionId, at: Date.now() })
+  void loadEarlier($)
+}
+// How long the requests of earlier sessions worked, newest sessions first, read once per session for the ETA.
+let earlierMs: number[] = []
+const MAX_EARLIER_FILES = 60
+async function loadEarlier($: Engine) {
+  if (!configDir) return
+  const host = hostOf($), own = `${safeId(sessionId)}.json`
+  try {
+    const names = (await host.listDir(requestsDir())).filter(n => n.endsWith('.json') && n !== own)
+    const dated = await Promise.all(names.map(async n => ({ n, at: (await host.stat(`${requestsDir()}/${n}`).catch(() => undefined))?.mtimeMs ?? 0 })))
+    const newest = dated.sort((a, b) => b.at - a.at).slice(0, MAX_EARLIER_FILES)
+    // a file cut short or unreadable counts as none
+    const read = await Promise.all(newest.map(f => host.readFile(`${requestsDir()}/${f.n}`).then(text => savedDurations(JSON.parse(text)), () => [])))
+    earlierMs = read.flat().slice(0, MAX_EARLIER)
+  } catch {
+    earlierMs = []
+  }
 }
 // The project's guardrails for the Guardrails tab: read at start, and again when Claude edits one of their files.
 // The Guardrails tab's switches for this project, kept in the store under the project's folder; and the note about
@@ -613,6 +632,8 @@ function flipGuard($: Engine, key: string | undefined) {
 }
 // The milestone the work bar shows as current, and since when: a new title starts its clock.
 let workSince = { title: '', at: 0 }
+// Claude's task list as the work bar last drew it, stamped with when each task started and finished, for the ETA.
+let taskSteps: Milestone[] = []
 
 // The requests the session made before ops-control saw it (turned on or reloaded mid-session, or a session resumed from
 // before ops-control kept a list) are read once from its transcript. A session with no transcript yet made none.
@@ -1635,19 +1656,12 @@ async function adoptSession($: Engine, endedId: string, cleared = false) {
   void loadPlan($)
 }
 
-// A second session.start (or /clear) while the dialog is open must not stack another.
-let asking = false
-async function askFirstRun($: Engine) {
-  if (asking) return
-  asking = true
+async function recordFirstRun($: Engine) {
   try {
-    const toast = await firstRun(hostOf($), q => $.ui.ask(q, ['Yes', 'No']).then(label => label, () => undefined), Date.now())
-    if (toast) $.ui.toast(toast)
+    await firstRun(hostOf($), Date.now())
     await syncTakeover($)
   } catch (err) {
     $.ui.log(`first run failed: ${err instanceof Error ? err.message : String(err)}`, { to: 'debug' })
-  } finally {
-    asking = false
   }
 }
 
@@ -1996,7 +2010,7 @@ export const register: Register = (on, options) => {
     void feedContext($)
     void loadPlan($)
     // a beat after launch, so the dialog does not open over the startup frame
-    if (e.isInteractive) $.clock.after(1500, () => void askFirstRun($))
+    if (e.isInteractive) $.clock.after(1500, () => void recordFirstRun($))
     // a hot reload restarts this module; the live band and pane must not keep an old snapshot
     publish($)
     return next(e)
@@ -2015,6 +2029,14 @@ export const register: Register = (on, options) => {
     turnGain = { green: 0, commits: 0 }
     pendingLevelUp = undefined
     feed($, { type: 'turn-start', at: Date.now() })
+    // A /subtask fork raises no agent.spawn (and the built-in security plugin keeps the classic SubagentStart from
+    // plugins): its first turn is where it is seen, and listed by the request it was given. An agent agent.spawn
+    // already bound is left as it is; turn.complete marks either done.
+    if (e.agentId) {
+      const fork = isForkId(e.agentId)
+      const task = e.text.trim().split('\n')[0]!.slice(0, 120) || (fork ? forkTask(e.agentId) : '')
+      feed($, { type: 'agent-bind', toolUseId: '', agentId: e.agentId, at: Date.now(), name: fork ? 'fork' : 'agent', task, ...(fork && { fork: true as const }) })
+    }
     if (!e.agentId) {
       setRequests($, startTurn(requests, { turnId: e.turnId, text: e.text, at: Date.now() }))
       // the newest request is the top row: a list scrolled down comes back up to it
@@ -2065,7 +2087,7 @@ export const register: Register = (on, options) => {
       writeType,
     })
     // after the feed, so a TaskCreate's task is in the plan with its title
-    setRequests($, requestWork(requests, { tool: e.tool, toolUseId, agentId: e.agentId, input, isError, text, resultTaskId, writeType, ...(denied && { denied }) }, model.plan), true)
+    setRequests($, requestWork(requests, { at: Date.now(), tool: e.tool, toolUseId, agentId: e.agentId, input, isError, text, resultTaskId, writeType, ...(denied && { denied }) }, model.plan), true)
     if (!denied && !ran.isError && !e.agentId && e.tool === 'Bash' && typeof input.command === 'string') turnGain.commits += countCommits(input.command)
     if (!e.agentId && model.lastTest?.at === endAt && !model.lastTest.passed) {
       failed = true
@@ -2262,12 +2284,15 @@ export const register: Register = (on, options) => {
     if (setup.bar === 'work') {
       // the work bar stands in for the band: always there, docked pane or not
       const asked = (await $.state.get(REQS)).value as { requests?: Requests } | undefined
-      const work = workOf(asked?.requests ?? requests, m.plan)
+      const reqs = asked?.requests ?? requests, found = workOf(reqs, m.plan)
+      taskSteps = found.tasks ? stamped(taskSteps, found.steps, now) : []
+      const work = found.tasks ? { ...found, steps: taskSteps } : found
+      const history = historyEta(reqs, now, earlierMs)
       const cur = work.steps[currentMilestone(work.steps)]
       if ((cur?.title ?? '') !== workSince.title) workSince = { title: cur?.title ?? '', at: now }
       const c = view.ctx
       const marker = c?.autoCompact && c.threshold && c.window ? (c.threshold / c.window) * 100 : undefined
-      mine = renderWorkBar(els, look?.theme ?? theme, { model: m, ...work, issues: workIssues(asked?.requests ?? requests), ...(cur && { since: workSince.at }), ...(marker !== undefined && { marker }), meter: setup.meter, now, columns: e.props.bodyColumns, look })
+      mine = renderWorkBar(els, look?.theme ?? theme, { model: m, ...work, issues: workIssues(reqs), ...(history && { history }), ...(cur && { since: workSince.at }), ...(marker !== undefined && { marker }), meter: setup.meter, now, columns: e.props.bodyColumns, look })
     } else mine = renderBand(els, m, theme, e.props.bodyColumns, tier, now, { look, band: setup.band })
     const pinned = pinRows(els, look, e.props.bodyColumns)
     if (!mine && !pinned) return below

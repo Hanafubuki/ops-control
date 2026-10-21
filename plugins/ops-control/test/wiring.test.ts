@@ -67,7 +67,7 @@ test('/clear starts the model over under the new session id', async ($, on) => {
   await cleared.unmount()
 })
 
-test('the work bar is over the prompt idle or working: the headline, then the context meter', async ($, on) => {
+test('the work bar is over the prompt idle or working: no headline without milestones, then the context meter', async ($, on) => {
   fakeFs(on)
   on('ui.panes', async () => ({ value: [] }))
   on('ui.render', async () => ({ type: 'Text', props: {}, children: ['engine'] }) as RenderElement)
@@ -75,14 +75,15 @@ test('the work bar is over the prompt idle or working: the headline, then the co
   on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
   mock.clock(on)
   const idle = await $.ui.mount({ plugin: 'ops-control', surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, isWorking: false } })
-  expect(await idle.find({ text: /Ready/ })).toBeDefined()
+  expect(await idle.find({ text: /Ready/ })).toBeUndefined()
   expect(await idle.find({ text: /CONTEXT/ })).toBeDefined()
   // the engine's own row stays under it
   expect(await idle.find({ text: 'engine' })).toBeDefined()
   await idle.unmount()
   await $.turn.start({ text: 'hi', turnId: 't1' })
   const working = await $.ui.mount({ plugin: 'ops-control', surface: 'terminal', component: 'AbovePrompt', props: BAND })
-  expect(await working.find({ text: /Thinking/ })).toBeDefined()
+  expect(await working.find({ text: /Thinking/ })).toBeUndefined()
+  expect(await working.find({ text: /CONTEXT/ })).toBeDefined()
   expect(await working.find({ text: /♥/ })).toBeUndefined()
   await working.unmount()
 })
@@ -492,56 +493,23 @@ function bootable(on: Parameters<typeof fakeFs>[0]) {
   on('ui.status', async () => ({ value: undefined }) as never)
 }
 
-test('the first interactive launch asks once and writes only under the config dir', async ($, on) => {
+test('an interactive launch asks nothing and leaves the status line alone', async ($, on) => {
   const { files, writes } = fakeFs(on, { '/fake/.claude/settings.json': '{"model":"opus"}' })
   const clock = mock.clock(on)
   mock.store(on)
   bootable(on)
-  const asked: string[] = []
-  // $.ui.ask runs as an AskUserQuestion tool call; answer it with the Yes label.
-  on('tool.call', async (_$, e) => {
-    if (e.tool !== 'AskUserQuestion') return { result: {}, text: '' } as never
-    const q = (e as unknown as { questions: { question: string }[] }).questions[0]!.question
-    asked.push(q)
-    return { result: { questions: [], answers: { [q]: 'Yes' } }, text: 'Yes' } as never
-  })
-  let toasted!: () => void
-  const toast = new Promise<void>(r => { toasted = r })
-  on('ui.toast', async () => { toasted(); return { value: undefined } as never })
-  on('session.id', async () => ({ value: 's1' }))
-  await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: true })
-  await clock.advance(1600)
-  await toast
-  expect(asked).toHaveLength(1)
-  expect(JSON.parse(files['/fake/.claude/settings.json']!).statusLine.command).toContain('/fake/.claude/ops-control/statusline.sh')
-  expect(writes.length).toBeGreaterThan(0)
-  expect(writes.every(p => p.startsWith('/fake/'))).toBe(true)
-  await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: true })
-  await clock.advance(1600)
-  expect(asked).toHaveLength(1)
-})
-
-test('two launches inside the delay open one dialog', async ($, on) => {
-  fakeFs(on, { '/fake/.claude/settings.json': '{}' })
-  const clock = mock.clock(on)
-  mock.store(on)
-  bootable(on)
   let asked = 0
-  let release!: () => void
-  const gate = new Promise<void>(r => { release = r })
   on('tool.call', async (_$, e) => {
-    if (e.tool !== 'AskUserQuestion') return { result: {}, text: '' } as never
-    asked++
-    await gate
-    return { result: { questions: [], answers: {} }, text: 'No' } as never
+    if (e.tool === 'AskUserQuestion') asked++
+    return { result: {}, text: '' } as never
   })
   on('ui.toast', async () => ({ value: undefined }) as never)
   on('session.id', async () => ({ value: 's1' }))
   await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: true })
-  await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: true })
   await clock.advance(1600)
-  expect(asked).toBe(1)
-  release()
+  expect(asked).toBe(0)
+  expect(files['/fake/.claude/settings.json']).toBe('{"model":"opus"}')
+  expect(writes.every(p => p.startsWith('/fake/'))).toBe(true)
 })
 
 test('-p runs never ask', async ($, on) => {
