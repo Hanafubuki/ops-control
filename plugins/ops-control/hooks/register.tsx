@@ -2632,6 +2632,20 @@ export const register: Register = (on, options) => {
     return { text }
   })
 
+  // The new name goes to Sidequest at once: the dashboard's Claude sessions page rebuilds at a turn's end, and /rename
+  // ends none, so refresh.sh rebuilds it now (in the background); /stask's helper retags this session's tickets.
+  on('command.run', { command: 'rename' }, async ($, e, next) => {
+    const r = await next(e)
+    if (off) return r
+    const runIfThere = (script: string, argv: string[]) => $.fs.exists(script).then(found => (found ? $.process.run(argv) : undefined))
+      .catch(err => $.ui.log(`${script} after /rename failed: ${err instanceof Error ? err.message : String(err)}`, { to: 'debug' }))
+    const sessionsPage = `${configDir}/sidequest-sessions/refresh.sh`
+    const stask = `${configDir}/skills/stask/session-info.py`
+    void runIfThere(sessionsPage, ['bash', sessionsPage])
+    if (sessionId) void runIfThere(stask, ['python3', stask, sessionId, '--sync-tickets'])
+    return r
+  })
+
   on('ui.message', async ($, e, next) => {
     if (off) return next(e)
     if (e.element === 'ops-control-seek' || e.element === 'ops-control-volume') {
