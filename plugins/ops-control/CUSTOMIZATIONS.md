@@ -119,7 +119,7 @@ Shows what is playing on your machine from any player, not only Spotify:
 
 Four new pets come with the name packs: **lelouch**, **shikamaru**, **gojo** and **levi**.
 - Each is 24×12 with the full animation set: idle, walk, working, done, sleep, alert, fail, hop, dance, juggle and more.
-- **While Claude works** they say their famous lines in the speech bubble (Gojo: "Nah, I'd win.", Shikamaru: "What a drag…", Levi: "Tch.", Lelouch: "Checkmate." and more): at most one every 45 seconds, never in a turn's first 8 seconds, not while Claude waits on you, and only while the pane is open. The quotes are in `WORKING_LINES` in `hooks/lines.ts`; the timing is `quipDue` in `hooks/moments.ts`. `/ops bubbles off` silences them too; Haiku mode never rewrites them.
+- **While Claude works** they say their famous lines in the speech bubble (Gojo: "Nah, I'd win.", Shikamaru: "What a drag…", Levi: "Tch.", Lelouch: "Checkmate." and more): at most one every 45 seconds, never in a turn's first 8 seconds, not while Claude waits on you, and only while the pane is open. The quotes are in `WORKING_LINES` in `hooks/lines.ts`, up to 80 characters each (`QUOTE_MAX`; other bubble lines stay at 40), and the bubble wraps them over up to three rows; the timing is `quipDue` in `hooks/moments.ts`. `/ops bubbles off` silences them too; Haiku mode never rewrites them.
 - For done, fail, hello and the other moments they use the default speech-bubble lines.
 - The art lives in `art/<name>/<name>.art`. `python3 art/build.py <name>` turns it into `hooks/sprites/<name>.ts`, a viewer page and sprite-sheet PNGs.
 - You can pick them in the `/plugin` menu's `pet` option. `/ops pet <name>` doesn't accept them yet (known gap); use a name pack or the `/plugin` option instead.

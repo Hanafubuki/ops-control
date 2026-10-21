@@ -8,7 +8,7 @@ import { PACKS } from './packpresets.ts'
 import { loadUserPacks, SAFE_NAME } from './userpacks.ts'
 import { BUILTIN_SHEETS, CLAWD_SHEET, eggSheet, stripRows, withLevelOutfit, type PetSetting, type PetInput, type PetKind, type PetSheet } from './pets.ts'
 import { loadUserPet, userPetNames, PET_DIR } from './userpets.ts'
-import { bubbleFor, BUBBLE_SETTINGS, daypart, fitsBubble, haikuLimit, haikuMaxTokens, haikuPrompt, kindWords, HaikuGate, HAIKU_MODEL, HAIKU_TIMEOUT_MS, sanitizeLine, speaks, voiceFor, type BubbleSetting, type BubbleVars, type HaikuContext } from './bubbles.ts'
+import { bubbleFor, BUBBLE_SETTINGS, QUOTE_MAX, daypart, fitsBubble, haikuLimit, haikuMaxTokens, haikuPrompt, kindWords, HaikuGate, HAIKU_MODEL, HAIKU_TIMEOUT_MS, sanitizeLine, speaks, voiceFor, type BubbleSetting, type BubbleVars, type HaikuContext } from './bubbles.ts'
 import { linesFor, pool, flavoursOf, workingLinesFor, type BubbleMood, type Moment } from './lines.ts'
 import { momentOf, quipDue } from './moments.ts'
 import { turnXp, countCommits, levelUp, levelOf, parseLevelStore, levelStoreIsNewer, outfitStoreIsNewer, levelStore, parseOutfitStore, outfitStore, resolveOutfit, outfitUnlocked, unlockedOutfits } from './levels.ts'
@@ -1219,7 +1219,7 @@ async function quip($: Engine) {
   if (bubbles === 'off' || !petOn() || !lines.length) return
   try { if (!(await $.ui.panes()).some(p => p.id === 'ops-control' && p.isShown)) return } catch { return }
   if (bubble) return
-  const line = bubbleFor(lines, {}, lastTemplate, Math.random)
+  const line = bubbleFor(lines, {}, lastTemplate, Math.random, QUOTE_MAX)
   lastTemplate = line.template
   const mine: Bubble = { text: line.text, mood: 'working', until: 0 }
   bubble = mine

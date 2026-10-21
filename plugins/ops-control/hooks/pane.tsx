@@ -754,7 +754,8 @@ const bubbleColor = (t: Theme, m: BubbleMood) => (m === 'fail' ? t.colors.fail :
 // Width of the Box the pet's Client sits in on a docked pane: inside the pane's border and padding (2 + 4).
 export const petStripCols = (paneWidth: number) => Math.max(0, Math.min(PET_STRIP_COLS, paneWidth - 6))
 
-const BUBBLE_LINES = 2
+// three rows, so a character's longer quote (QUOTE_MAX) fits beside the pet; shorter lines take fewer
+const BUBBLE_LINES = 3
 const cellsOf = (s: string) => visibleLength([{ text: s, color: '' }])
 
 // Text cells and rows a bubble has at this pane width: inside its border and padding,

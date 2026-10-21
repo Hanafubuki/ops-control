@@ -238,7 +238,13 @@ test('on Linux the extras read is shown but there is no shuffle button', async (
 
 // With no seek Client (VS Code, mobile) the static bar only moves when the pane redraws, so each read must.
 test('surfaces without a seek Client redraw on every read; the terminal does not', async ($, on) => {
-  const { ran } = boot(on, {}, { ...LINUX_BUS, [BUS]: ok(PLAYING) })
+  // While the VS Code half runs, each read reports the track a second further on, so the static bar has something new
+  // to draw. The hooks time the reads with Date.now(), which the mocked clock does not move: in the terminal half a
+  // moving position would read as a seek, so it reports the same one, as a player read within the same instant does.
+  const answers: Record<string, { exitCode: number; stdout: string }> = { ...LINUX_BUS }
+  let moving = true, second = 1
+  Object.defineProperty(answers, BUS, { enumerable: true, get: () => ok(PLAYING.replace('"data":9000000', '"data":600000000').replace('"data":1000000}', `"data":${(moving ? second++ : second) * 1000000}}`)) })
+  const { ran } = boot(on, {}, answers)
   const clock = mock.clock(on)
   await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: true })
   await clock.advance(50)
@@ -252,7 +258,9 @@ test('surfaces without a seek Client redraw on every read; the terminal does not
     await pane.unmount()
     return out
   }
-  const vscode = await redrawn('vscode'), term = await redrawn('terminal')
+  const vscode = await redrawn('vscode')
+  moving = false
+  const term = await redrawn('terminal')
   expect(vscode.reads).toBeGreaterThan(0)
   expect(vscode.changed).toBe(true)
   expect(term.reads).toBeGreaterThan(0)

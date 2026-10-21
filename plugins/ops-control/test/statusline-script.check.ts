@@ -33,7 +33,7 @@ function run(path: string) {
 
 function install(fallback: (self: string) => string) {
   const dir = mkdtempSync(`${tmpdir()}/ops-control-sl-`)
-  mkdirSync(`${dir}/ops`)
+  mkdirSync(`${dir}/ops-control`)
   const path = SCRIPT_PATH(dir)
   // script() refuses a self-referencing fallback, so rewrite the fallback line the way the
   // buggy build wrote it. That leaves the recursion guard as the only thing stopping the loop.

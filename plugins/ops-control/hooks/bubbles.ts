@@ -12,11 +12,13 @@ export const HAIKU_TIMEOUT_MS = 4000
 export const HAIKU_COOLDOWN_MS = 90_000
 export type BubbleVars = { file?: string; n?: number; command?: string; agent?: string; unlock?: string }
 export const BUBBLE_MAX = 40
+// A character's famous line is said as written, so it may run longer than a moment's line: the bubble wraps it.
+export const QUOTE_MAX = 80
 
-export function fill(template: string, v: BubbleVars): string {
+export function fill(template: string, v: BubbleVars, max = BUBBLE_MAX): string {
   const s = [...template.replace(/\{(file|n|command|agent|unlock)\}/g, (_, k: keyof BubbleVars) => String(v[k] ?? '…'))].filter(c => !isUnsafe(c.codePointAt(0)!)).join('')
   const cps = [...s]
-  return cps.length > BUBBLE_MAX ? cps.slice(0, BUBBLE_MAX - 1).join('') + '…' : s
+  return cps.length > max ? cps.slice(0, max - 1).join('') + '…' : s
 }
 
 export function pickLine(lines: string[], last: string | undefined, rand: () => number): string {
@@ -32,9 +34,9 @@ export function fillable(lines: string[], v: BubbleVars): string[] {
   return named.length ? named : ok.length ? ok : lines
 }
 
-export function bubbleFor(lines: string[], vars: BubbleVars, last: string | undefined, rand: () => number) {
+export function bubbleFor(lines: string[], vars: BubbleVars, last: string | undefined, rand: () => number, max = BUBBLE_MAX) {
   const template = pickLine(fillable(lines, vars), last, rand)
-  return { text: fill(template, vars), template }
+  return { text: fill(template, vars, max), template }
 }
 
 export const DEFAULT_VOICE = 'a small pixel pet. Friendly and brief.'

@@ -134,7 +134,7 @@ export type BubbleMood = Moment | 'working'
 export const WORKING_LINES: Record<string, string[]> = {
   lelouch: ['Lelouch vi Britannia commands you!', 'All hail Britannia!', 'Checkmate.', "If the king doesn't move…", 'Destroy the world, create it anew.', 'Zero has returned.', 'I am Zero!', 'The ones who should kill…'],
   shikamaru: ['What a drag…', 'Troublesome…', "I'd rather watch the clouds.", 'Shadow Possession Jutsu… success.', 'This is such a pain.', 'Ugh, why me?'],
-  gojo: ["Nah, I'd win.", 'Domain Expansion: Infinite Void.', "Don't worry, I'm the strongest.", 'Throughout heaven and earth…', 'I alone am the honored one.', 'Hollow Purple.', 'Are you the strongest because…'],
+  gojo: ["Nah, I'd win.", 'Domain Expansion: Infinite Void.', "Don't worry, I'm the strongest.", 'Are you the strongest because…', 'Yowai mo.', "I hope you don't mind if I show off a little.", 'Love is the most twisted curse of all.'],
   levi: ['Tch.', 'Give up on your dreams and die.', 'This place is filthy.', 'Clean it again. Properly.', 'Choose what you regret least.', 'Oi. Stop slacking.'],
 }
 export const workingLinesFor = (pet: string): string[] => Object.hasOwn(WORKING_LINES, pet) ? WORKING_LINES[pet]! : []

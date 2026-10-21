@@ -101,7 +101,7 @@ test('pane draws its tab buttons and opens on Plan', async ($, on) => {
 const AGENT_CALL = { tool: 'Agent', tool_use_id: 'a1', description: 'scout', prompt: 'look', subagent_type: 'Explore' }
 const END = { answer: '', durationMs: 10, isAborted: false, turnId: 't1' }
 
-test('the status entry shows only while Claude or a subagent works', async ($, on) => {
+test('the status entry is never shown; a background subagent shows on the work bar until its turn ends', async ($, on) => {
   fakeFs(on)
   const clock = mock.clock(on)
   const statuses: (string | undefined)[] = []
@@ -114,35 +114,32 @@ test('the status entry shows only while Claude or a subagent works', async ($, o
   on('turn.complete', async () => ({ text: '' }))
   on('tool.call', async () => ({ result: { status: 'async_launched' }, text: 'Async agent launched' }) as never)
   on('agent.spawn', async () => ({ model: 'm', agentId: 'ag-1' }))
+  const subagents = async () => {
+    const band = await $.ui.mount({ plugin: 'ops-control', surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, isWorking: false } })
+    const found = await band.find({ text: /1 subagent/ })
+    await band.unmount()
+    return found !== undefined
+  }
 
   await $.turn.start({ text: 'hi', turnId: 't1' })
-  expect(statuses.at(-1)).toContain('thinking')
   await $.tool.call(AGENT_CALL as never)
   await $.agent.spawn({ tool_use_id: 'a1', prompt: 'look', description: 'scout', subagentType: 'Explore', background: true } as never)
   await $.turn.complete({ ...END, reason: 'answer' })
   // the main turn is over; the background subagent is not
-  expect(statuses.at(-1)).toBe('◆ delegating · ctx 10%')
-  const band = await $.ui.mount({ plugin: 'ops-control', surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, isWorking: false } })
-  expect(await band.find({ text: /1 subagent/ })).toBeDefined()
-  await band.unmount()
-  const ticks = statuses.length
+  expect(await subagents()).toBe(true)
   await clock.advance(3000)
-  expect(statuses.length).toBeGreaterThanOrEqual(ticks + 3)
-
   await $.turn.complete({ ...END, turnId: 'sub', agentId: 'ag-1', reason: 'answer' })
-  expect(statuses.at(-1)).toBeUndefined()
-  const idle = statuses.length
-  await clock.advance(3000)
-  expect(statuses.length).toBe(idle)
+  expect(await subagents()).toBe(false)
+  // this copy never pins the entry under the prompt (CUSTOMIZATIONS.md)
+  expect(statuses.every(x => x === undefined)).toBe(true)
 })
-
 test('a named teammate that goes idle stops counting as running', async ($, on) => {
   fakeFs(on)
   const clock = mock.clock(on)
-  const statuses: (string | undefined)[] = []
   let status = 'running'
-  on('ui.status', async (_$, e) => { statuses.push(e.text); return { value: undefined } as never })
+  on('ui.status', async () => ({ value: undefined }) as never)
   on('ui.panes', async () => ({ value: [] }))
+  on('ui.render', async () => ({ type: 'Text', props: {}, children: ['engine'] }) as RenderElement)
   on('session.id', async () => ({ value: 's1' }))
   on('session.usage', async () => ({ value: { context: { window: 1000, percent: 10 } } as never }))
   on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
@@ -150,19 +147,24 @@ test('a named teammate that goes idle stops counting as running', async ($, on) 
   on('tool.call', async () => ({ result: { status: 'teammate_spawned' }, text: 'Spawned' }) as never)
   on('agent.spawn', async () => ({ model: 'm', agentId: 'sleeper@s1' }))
   on('agent.list', async () => ({ value: [{ id: 'sleeper@s1', description: 'nap', type: 'general-purpose', status, name: 'sleeper' }] }) as never)
+  const subagents = async () => {
+    const band = await $.ui.mount({ plugin: 'ops-control', surface: 'terminal', component: 'AbovePrompt', props: { ...BAND, isWorking: false } })
+    const found = await band.find({ text: /1 subagent/ })
+    await band.unmount()
+    return found !== undefined
+  }
 
   await $.turn.start({ text: 'hi', turnId: 't1' })
   await $.tool.call({ ...AGENT_CALL, name: 'sleeper' } as never)
   await $.agent.spawn({ tool_use_id: 'a1', prompt: 'look', description: 'nap', subagentType: 'general-purpose', background: true, name: 'sleeper' } as never)
   await $.turn.complete({ ...END, reason: 'answer' })
   await clock.advance(2000)
-  expect(statuses.at(-1)).toBe('◆ delegating · ctx 10%')
+  expect(await subagents()).toBe(true)
   // a teammate's loop raises no turn.complete; agent.list is where it shows as idle
   status = 'idle'
   await clock.advance(2000)
-  expect(statuses.at(-1)).toBeUndefined()
+  expect(await subagents()).toBe(false)
 })
-
 test('the takeover keeps the status entry cleared', async ($, on) => {
   fakeFs(on)
   mock.clock(on)
@@ -223,26 +225,8 @@ test('a / in the stored fields puts the takeover file on two lines', async ($, o
   expect(rows.at(-1)).toContain('ctx ')
 })
 
-test('without a takeover the entry under the prompt uses the fields and has no escapes', async ($, on) => {
+test('without a takeover nothing shows under the prompt, whatever fields are stored', async ($, on) => {
   fakeFs(on, {}, undefined, { COLORTERM: 'truecolor' })
-  mock.clock(on)
-  mock.store(on, { statusline: ['activity', 'ctx'] })
-  const statuses: (string | undefined)[] = []
-  on('ui.status', async (_$, e) => { statuses.push(e.text); return { value: undefined } as never })
-  on('ui.panes', async () => ({ value: [] }))
-  on('session.id', async () => ({ value: 's1' }))
-  on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
-  on('session.start', async (_$, e) => ({ cwd: e.cwd }) as never)
-  on('command.register', async () => ({ value: undefined }) as never)
-  await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: false })
-  await $.turn.start({ text: 'hi', turnId: 't1' })
-  const shown = statuses.filter((s): s is string => s !== undefined)
-  expect(shown.length).toBeGreaterThan(0)
-  expect(shown.every(s => !s.includes('\x1b'))).toBe(true)
-})
-
-test('without a takeover a / in the fields joins both halves on one line in the entry', async ($, on) => {
-  fakeFs(on)
   const clock = mock.clock(on)
   mock.store(on, { statusline: ['activity', '/', 'ctx'] })
   const statuses: (string | undefined)[] = []
@@ -256,11 +240,9 @@ test('without a takeover a / in the fields joins both halves on one line in the 
   await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: false })
   await $.turn.start({ text: 'hi', turnId: 't1' })
   await clock.advance(10)
-  const joined = statuses.filter((s): s is string => s !== undefined && s.includes(' · '))
-  expect(joined.length).toBeGreaterThan(0)
-  expect(joined.every(s => !s.includes('\n'))).toBe(true)
+  expect(statuses.length).toBeGreaterThan(0)
+  expect(statuses.every(x => x === undefined)).toBe(true)
 })
-
 test('session.measure puts usage limits in the status file', async ($, on) => {
   const { files } = fakeFs(on)
   const clock = mock.clock(on)
@@ -679,27 +661,32 @@ test('shiny from userConfig or the store applies only once earned', { options: {
 })
 
 test('a main-loop step sets the effort field; a subagent step leaves it; a numeric effort shows as given; a step without one clears it', async ($, on) => {
-  fakeFs(on)
-  mock.clock(on)
-  const statuses: (string | undefined)[] = []
-  on('ui.status', async (_$, e) => { statuses.push(e.text); return { value: undefined } as never })
+  const { files } = fakeFs(on)
+  const clock = mock.clock(on)
+  mock.store(on, { 'statusline-backup': '__none__', statusline: ['effort'] })
+  on('ui.status', async () => ({ value: undefined }) as never)
   on('ui.panes', async () => ({ value: [] }))
   on('session.id', async () => ({ value: 's1' }))
   on('session.usage', async () => ({ value: { context: { window: 1000, percent: 10 } } as never }))
   on('turn.start', async (_$, e) => ({ turnId: e.turnId }))
+  on('session.start', async (_$, e) => ({ cwd: e.cwd }) as never)
+  on('command.register', async () => ({ value: undefined }) as never)
   on('turn.step', async function* (_$, e) { return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: null } as never })
+  await $.session.start({ cwd: '/r', surface: 'terminal', isInteractive: false })
   await $.turn.start({ text: 'hi', turnId: 't1' })
-  expect(statuses.at(-1)).not.toContain('◐')
+  // the effort shows in the takeover's status file, the one place this copy draws the fields
+  const shown = async () => { await clock.advance(10); return (files['/fake/.claude/ops-control/status/s1'] ?? '').replace(/\x1b\[[0-9;]*m/g, '') }
+  expect(await shown()).not.toContain('◐')
   // a stream does nothing until read
   const step = async (index: number, extra: object) => {
     for await (const _ of $.turn.step({ turnId: 't1', index, model: 'claude-opus-5-5', messageCount: index + 1, ...extra } as never)) void _
   }
   await step(0, { effort: 'high' })
-  expect(statuses.at(-1)).toContain('◐ high')
+  expect(await shown()).toContain('◐ high')
   await step(1, { effort: 'low', agentId: 'a1' })
-  expect(statuses.at(-1)).toContain('◐ high')
+  expect(await shown()).toContain('◐ high')
   await step(2, { effort: 8000 })
-  expect(statuses.at(-1)).toContain('◐ 8000')
+  expect(await shown()).toContain('◐ 8000')
   await step(3, {})
-  expect(statuses.at(-1)).not.toContain('◐')
+  expect(await shown()).not.toContain('◐')
 })

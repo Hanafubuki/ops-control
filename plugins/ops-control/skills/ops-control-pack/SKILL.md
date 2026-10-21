@@ -1,5 +1,5 @@
 ---
-name: Ops Control-pack
+name: ops-control-pack
 description: Use when the user asks for a new Ops Control pack, theme or look, wants a palette, color scheme, image, screenshot or mood turned into one, wants to change an existing pack, theme or color, or wants to change what Ops Control's status line shows, for example "make me a Ops Control theme", "turn this palette into a Ops Control pack", "make arcade less pink", "drop the labels in cozy", "show my usage limits in the status line".
 ---
 

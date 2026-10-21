@@ -2,7 +2,7 @@ import { test, expect } from 'claude-code/testing'
 import { quipDue, QUIP_DELAY_MS, QUIP_GAP_MS } from '../hooks/moments.ts'
 import { initialModel } from '../hooks/model.ts'
 import { WORKING_LINES, workingLinesFor } from '../hooks/lines.ts'
-import { BUBBLE_MAX } from '../hooks/bubbles.ts'
+import { BUBBLE_MAX, QUOTE_MAX, bubbleFor, wrapBubble } from '../hooks/bubbles.ts'
 import { PACK_PET_NAMES } from '../hooks/petfile.ts'
 
 const m = (o: object) => ({ ...initialModel(), ...o })
@@ -28,9 +28,18 @@ test('no quip outside a turn, while waiting on the person, or for a subagent cal
 test('every pack character has its own quotes, each fitting a bubble; other pets have none', async () => {
   for (const pet of PACK_PET_NAMES) {
     expect(workingLinesFor(pet).length).toBeGreaterThanOrEqual(5)
-    for (const l of workingLinesFor(pet)) expect([...l].length).toBeLessThanOrEqual(BUBBLE_MAX)
+    for (const l of workingLinesFor(pet)) expect([...l].length).toBeLessThanOrEqual(QUOTE_MAX)
   }
   expect(Object.keys(WORKING_LINES).sort()).toEqual([...PACK_PET_NAMES].sort())
   expect(workingLinesFor('clawd')).toEqual([])
   expect(workingLinesFor('constructor')).toEqual([])
+})
+
+test('a quote longer than a moment\'s line is said whole, wrapped over the bubble\'s rows', () => {
+  const quote = "I hope you don't mind if I show off a little."
+  expect([...quote].length).toBeGreaterThan(BUBBLE_MAX)
+  expect(bubbleFor([quote], {}, undefined, () => 0, QUOTE_MAX).text).toBe(quote)
+  // a moment's line keeps the shorter cap
+  expect(bubbleFor([quote], {}, undefined, () => 0).text).toHaveLength(BUBBLE_MAX)
+  expect(wrapBubble(quote, 20, 3)).toEqual(["I hope you don't", 'mind if I show off a', 'little.'])
 })
