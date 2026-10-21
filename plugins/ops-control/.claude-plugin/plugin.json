@@ -1,6 +1,6 @@
 {
   "name": "ops-control",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Ops Control for Claude Code: a cockpit pane for changes, subagents and context, an activity band, and shareable themes.",
   "author": {
     "name": "Hanafubuki",

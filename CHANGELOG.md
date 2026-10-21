@@ -2,6 +2,10 @@
 
 Releases of the ops-control marketplace. Version numbers follow [semantic versioning](https://semver.org); each release is a git tag.
 
+## [1.0.4] - 2026-10-21
+
+- Ops Control: /rename sends the new name to Sidequest at once (rebuilds the Claude sessions page, retags the session's /stask tickets)
+
 ## [1.0.3] - 2026-10-21
 
 - Ops Control: character quotes up to 80 characters over a three-row bubble, new Gojo quotes, and the suite green again (status-entry tests match this copy's hidden entry, music redraw fixture, pack skill name, status line script folder)
