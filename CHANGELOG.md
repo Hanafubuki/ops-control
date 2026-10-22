@@ -2,6 +2,10 @@
 
 Releases of the ops-control marketplace. Version numbers follow [semantic versioning](https://semver.org); each release is a git tag.
 
+## [1.0.6] - 2026-10-22
+
+- Ops Control: /subtask questions and answers are kept as subplans, listed in a SUBPLANS box under the Plan tab's requests and saved with the session for Sidequest's Claude sessions page
+
 ## [1.0.5] - 2026-10-22
 
 - Ops Control: each request keeps its ETA (first work-bar guess) to set against how long it took, shown in the Plan tab; a new session draws nothing of its own until the saved look and pack are loaded, and the Sidequest board icon is the pack's character from the first write
