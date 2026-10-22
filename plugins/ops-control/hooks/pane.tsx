@@ -17,7 +17,7 @@ import { progressAt, type MusicCmd, type OpenMusic, type QueueItem } from './mus
 import { barRow, type SeekBarProps } from './music/seek.ts'
 import { coverPlaceholder } from './music/art.ts'
 import type { MusicCaps } from './music/reader.ts'
-import { currentMilestone, openIssues, requestTitle, workedMs, type Milestone, type MilestoneStatus, type Request, type Requests, type RequestStatus } from './requests.ts'
+import { currentMilestone, openIssues, requestTitle, workedMs, type Milestone, type MilestoneStatus, type Request, type Requests, type RequestStatus, type Subtask } from './requests.ts'
 import { markdownRows, wrapSegs } from './mdrows.ts'
 import { countdown } from './workbar.ts'
 import type { GuardSwitches, Guardrails } from './guardrails.ts'
@@ -662,8 +662,26 @@ function plan(m: Model, t: Theme, v: PaneView, w: number, compact: boolean, limi
   if (hiddenDone && folded === undefined) items.push([{ text: `${sub}  +${hiddenDone} more done`, color: c.dim }])
   const finished = asked.filter(r => r.status !== 'pending' && r.status !== 'in_progress').length
   const box = section('PLAN', asked.length ? `${finished}/${asked.length}` : m.plan.length ? `${done}/${m.plan.length}` : '', items, w, t, border)
+  const subs = rs?.subtasks ?? []
+  const subBox = subs.length ? [[], ...section('SUBPLANS', `${subs.filter(x => x.status !== 'pending' && x.status !== 'in_progress').length}/${subs.length}`, subplanRows(subs, t, iw, now), w, t, border)] : []
   // section() puts the top edge (or the unboxed header) first and edges a boxed row either side
-  return { rows: box, n: items.length, links: linksAt(box, 1, w >= MIN_BOX) }
+  return { rows: [...box, ...subBox], n: items.length, links: linksAt(box, 1, w >= MIN_BOX) }
+}
+
+// Every /subtask, newest on top: each question sent to its fork and the answer it gave, in full.
+function subplanRows(subs: readonly Subtask[], t: Theme, iw: number, now: number): Seg[][] {
+  const c = t.colors, rows: Seg[][] = []
+  ;[...subs].reverse().forEach((x, i) => {
+    if (i) rows.push([])
+    const took = (x.endedAt ?? (x.status === 'in_progress' ? now : x.at)) - x.at
+    rows.push(spread([{ text: `${REQUEST_MARK[x.status]} `, color: requestColor(x.status, t) }, { text: `⑂ #${x.n} `, color: c.dim }, { text: x.exchanges[0]?.question.split('\n')[0] || '(no question)', color: c.text, bold: true }], [{ text: `${REQUEST_WORD[x.status]} · ${duration(took)}`, color: c.dim }], iw, t))
+    for (const e of x.exchanges) {
+      if (e.question) rows.push(...wrapSegs([{ text: e.question, color: c.accent }], iw, [{ text: '  Q ', color: c.dim }]))
+      if (e.answer) rows.push(...markdownRows(e.answer, iw - 4, t).map((row, j) => [{ text: j ? '    ' : '  A ', color: c.dim }, ...row]))
+      else rows.push([{ text: '  A ', color: c.dim }, { text: x.status === 'in_progress' ? 'Working on it…' : x.status === 'pending' ? 'Waiting for the fork…' : 'No answer.', color: c.dim }])
+    }
+  })
+  return rows
 }
 
 // What fills the context window: the bar split by kind, its legend, the chart over the session, the heaviest

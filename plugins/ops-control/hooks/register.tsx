@@ -16,7 +16,7 @@ import { recordPass, unlockEgg, eggUnlocked, hintDue, EGG_HINTS, overlays, local
 import { branchOf, gitBase, rebase, refreshCounts, serial, type Repo } from './changes.ts'
 import { readDiff } from './diff.ts'
 import { loadTasks, taskListId } from './tasks.ts'
-import { adopt, agentBind, agentStart, backfill, currentMilestone, drop, endTurn, foldIn, hasQueued, initialRequests, loadSaved, normalizeRequests, readMilestones, retext, saved, stamped, settleQueued, startTurn, submit, toolEnd as requestWork, unstarted, withinSize, type Milestone, type Requests } from './requests.ts'
+import { adopt, agentBind, agentStart, backfill, currentMilestone, drop, endTurn, foldIn, hasQueued, initialRequests, loadSaved, normalizeRequests, readMilestones, retext, saved, stamped, settleQueued, startTurn, submit, subtaskAsk, subtaskDrop, subtaskEnd, subtaskTurn, toolEnd as requestWork, unstarted, withinSize, type Milestone, type Requests } from './requests.ts'
 import { TranscriptReader, projectFolder, readTranscript } from './backfill.ts'
 import { cacheHit, heaviest } from './ctxchart.ts'
 import { pinRows, startOpspin, wireOpspin } from './opspin.tsx'
@@ -2041,6 +2041,8 @@ export const register: Register = (on, options) => {
       const fork = isForkId(e.agentId)
       const task = e.text.trim().split('\n')[0]!.slice(0, 120) || (fork ? forkTask(e.agentId) : '')
       feed($, { type: 'agent-bind', toolUseId: '', agentId: e.agentId, at: Date.now(), name: fork ? 'fork' : 'agent', task, ...(fork && { fork: true as const }) })
+      // a /subtask's questions and answers are the Plan tab's Subplans
+      if (fork || requests.subtasks.some(t => t.agentId === e.agentId)) setRequests($, subtaskTurn(requests, { agentId: e.agentId, text: e.text, at: Date.now() }))
     }
     if (!e.agentId) {
       setRequests($, noteEta(startTurn(requests, { turnId: e.turnId, text: e.text, at: Date.now() }), Date.now(), earlierMs))
@@ -2179,6 +2181,7 @@ export const register: Register = (on, options) => {
       const u = e.usage
       const tokens = u ? u.input_tokens + u.output_tokens + u.cache_creation_input_tokens : undefined
       feed($, { type: 'agent-done', at: Date.now(), agentId: e.agentId, tokens })
+      if (requests.subtasks.some(t => t.agentId === e.agentId)) setRequests($, subtaskEnd(requests, { agentId: e.agentId, answer: e.answer ?? '', reason: e.reason, at: Date.now() }))
       refresh($)
       return r
     }
@@ -2710,6 +2713,14 @@ export const register: Register = (on, options) => {
 // submission settles.
 async function trackRequest($: Engine, e: PromptSubmitInput, next: (e: PromptSubmitInput) => Promise<PromptSubmitResult>): Promise<PromptSubmitResult> {
   if (e.isMeta || !PERSON_ORIGINS.includes(e.origin.kind) || (!e.text.trim() && !e.command)) return next(e)
+  // /subtask forks the session: no turn of this one answers it, its fork does (a Subplan, not a request)
+  if (e.command && e.command.name.replace(/^.*:/, '') === 'subtask' && e.command.args?.trim()) {
+    const asked = subtaskAsk(requests, { question: e.command.args, at: Date.now() })
+    setRequests($, asked.rs)
+    const r = await next(e)
+    if ('drop' in r) setRequests($, subtaskDrop(requests, asked.id))
+    return r
+  }
   const typed = e.command ? `/${e.command.name}${e.command.args ? ' ' + e.command.args : ''}` : e.text
   const made = submit(requests, { text: typed, at: Date.now(), ...(e.turnId && { turnId: e.turnId }), ...(e.command && { command: true }) })
   setRequests($, made.rs)

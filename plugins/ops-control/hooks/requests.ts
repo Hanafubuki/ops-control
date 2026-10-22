@@ -57,8 +57,14 @@ export type Request = {
   eta?: RequestEta
 }
 export type FollowUps = { questions: string[]; actions: string[] }
+// A /subtask: a fork that works beside the session. Each question sent to it (the command's, then any message sent
+// to the fork after) is one exchange, answered by the fork's turn that ends next.
+export type SubtaskExchange = { question: string; answer?: string; reason?: TurnReason; at: number; endedAt?: number }
+export type Subtask = { id: string; n: number; agentId?: string; status: RequestStatus; at: number; endedAt?: number; exchanges: SubtaskExchange[] }
 export type Requests = {
   list: Request[]
+  // the /subtasks, oldest first: the Plan tab's Subplans
+  subtasks: Subtask[]
   seq: number
   // the main turn running now, when it started, and the request it works for
   turnId?: string
@@ -82,7 +88,7 @@ const MAX_OWNERS = 200
 const STATUSES: readonly RequestStatus[] = ['pending', 'in_progress', 'completed', 'interrupted', 'failed']
 const REASONS: readonly TurnReason[] = ['answer', 'aborted', 'error', 'refusal']
 
-export const initialRequests = (): Requests => ({ list: [], seq: 0, owners: {} })
+export const initialRequests = (): Requests => ({ list: [], subtasks: [], seq: 0, owners: {} })
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '')
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
@@ -201,6 +207,52 @@ export function settleQueued(rs: Requests): Requests {
       return { ...r, status: h && h.status !== 'in_progress' ? h.status : 'completed', turnIds: [r.queuedIn!], ...(h && { foldedInto: h.id, startedAt: h.startedAt, endedAt: h.endedAt }), turns: last ? [last] : [] }
     }),
   }
+}
+
+const MAX_SUBTASKS = 50
+const MAX_EXCHANGES = 20
+const updateSubtask = (rs: Requests, id: string, f: (t: Subtask) => Subtask): Requests => ({ ...rs, subtasks: rs.subtasks.map(t => (t.id === id ? f(t) : t)) })
+
+// The person typed /subtask <question>: a subplan waits for its fork.
+export function subtaskAsk(rs: Requests, p: { question: string; at: number }): { rs: Requests; id: string } {
+  const n = (rs.subtasks.at(-1)?.n ?? 0) + 1, id = `s${n}-${Math.max(0, Math.round(p.at)).toString(36)}`
+  const t: Subtask = { id, n, status: 'pending', at: p.at, exchanges: [{ question: clip(p.question.trim(), MAX_TEXT), at: p.at }] }
+  return { rs: { ...rs, subtasks: [...rs.subtasks, t].slice(-MAX_SUBTASKS) }, id }
+}
+export const subtaskDrop = (rs: Requests, id: string): Requests => ({ ...rs, subtasks: rs.subtasks.filter(t => t.id !== id) })
+
+// A fork's turn starts. Its first one takes the oldest subplan still waiting for its fork; a fork no /subtask was
+// seen for (typed before ops-control loaded) is a subplan of its own. A later turn that carries text is a new
+// question sent to the fork; one with none (a continuation) asks nothing new.
+export function subtaskTurn(rs: Requests, p: { agentId: string; text: string; at: number }): Requests {
+  const text = clip(p.text.trim(), MAX_TEXT)
+  const own = rs.subtasks.find(t => t.agentId === p.agentId)
+  if (!own) {
+    const waiting = rs.subtasks.find(t => !t.agentId && t.status === 'pending')
+    if (waiting) return updateSubtask(rs, waiting.id, t => ({ ...t, agentId: p.agentId, status: 'in_progress' }))
+    const made = subtaskAsk(rs, { question: text, at: p.at })
+    return updateSubtask(made.rs, made.id, t => ({ ...t, agentId: p.agentId, status: 'in_progress' }))
+  }
+  const last = own.exchanges.at(-1)
+  const asks = text && !(last && last.answer === undefined && last.question === text)
+  return updateSubtask(rs, own.id, t => ({
+    ...t, status: 'in_progress', endedAt: undefined,
+    ...(asks && { exchanges: [...t.exchanges, { question: text, at: p.at }].slice(-MAX_EXCHANGES) }),
+  }))
+}
+
+// A fork's turn ended: its answer goes to the question it was working on (a turn after an answered one adds to it).
+export function subtaskEnd(rs: Requests, p: { agentId: string; answer: string; reason: TurnReason; at: number }): Requests {
+  const own = rs.subtasks.find(t => t.agentId === p.agentId)
+  if (!own) return rs
+  const status: RequestStatus = p.reason === 'answer' ? 'completed' : p.reason === 'aborted' ? 'interrupted' : 'failed'
+  const answer = clip(p.answer.trim(), MAX_ANSWER)
+  return updateSubtask(rs, own.id, t => {
+    const exchanges = t.exchanges.length ? t.exchanges : [{ question: '', at: t.at }]
+    const last = exchanges.at(-1)!
+    const joined = last.answer && answer ? `${last.answer}\n\n${answer}` : last.answer || answer
+    return { ...t, status, endedAt: p.at, exchanges: [...exchanges.slice(0, -1), { ...last, ...(joined && { answer: clip(joined, MAX_ANSWER) }), reason: p.reason, endedAt: p.at }] }
+  })
 }
 
 // The main-loop turn ended: every request it worked for gets its answer.
@@ -493,6 +545,19 @@ function readRequest(raw: unknown): Request | undefined {
   }
 }
 
+function readSubtask(raw: unknown): Subtask | undefined {
+  const o = obj(raw), id = str(o.id), n = num(o.n), status = str(o.status) as RequestStatus
+  if (!id || !n || !STATUSES.includes(status)) return undefined
+  const exchanges = (Array.isArray(o.exchanges) ? o.exchanges : []).flatMap((x): SubtaskExchange[] => {
+    const e = obj(x), reason = str(e.reason) as TurnReason
+    return [{
+      question: clip(str(e.question), MAX_TEXT), at: num(e.at), ...(typeof e.answer === 'string' && { answer: clip(e.answer, MAX_ANSWER) }),
+      ...(REASONS.includes(reason) && { reason }), ...(typeof e.endedAt === 'number' && { endedAt: e.endedAt }),
+    }]
+  }).slice(-MAX_EXCHANGES)
+  return { id, n, status, at: num(o.at), ...(str(o.agentId) && { agentId: str(o.agentId) }), ...(typeof o.endedAt === 'number' && { endedAt: o.endedAt }), exchanges }
+}
+
 // The milestone the work is at: the one running, else one being checked, waiting or blocked.
 export function currentMilestone(ms: readonly Milestone[]): number {
   for (const s of ['in_progress', 'verifying', 'waiting', 'blocked'] as const) {
@@ -510,6 +575,7 @@ export function normalizeRequests(raw: unknown): Requests {
   if (o.owners && typeof o.owners === 'object') for (const [k, v] of Object.entries(o.owners)) if (typeof v === 'string') owners[k] = v
   return {
     list,
+    subtasks: (Array.isArray(o.subtasks) ? o.subtasks : []).map(readSubtask).filter((t): t is Subtask => t !== undefined).slice(-MAX_SUBTASKS),
     seq: Math.max(num(o.seq), ...list.map(r => r.n), 0),
     ...(str(o.turnId) && { turnId: str(o.turnId) }),
     ...(typeof o.turnAt === 'number' && { turnAt: o.turnAt }),
@@ -534,10 +600,11 @@ export function withinSize(rs: Requests, max = MAX_JSON): Requests {
 // What goes to disk for `claude --resume`: the list alone. A session read back runs no turn, so a request it
 // left running was cut off, and one still waiting never ran.
 export const SAVE_FORMAT = 1
-export const saved = (rs: Requests) => ({ format: SAVE_FORMAT, seq: rs.seq, list: withinSize(rs).list, ...(rs.filled && { filled: true }) })
+export const saved = (rs: Requests) => ({ format: SAVE_FORMAT, seq: rs.seq, list: withinSize(rs).list, ...(rs.subtasks.length && { subtasks: rs.subtasks }), ...(rs.filled && { filled: true }) })
 export function loadSaved(raw: unknown): Requests {
   const o = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {}
   if (typeof o.format === 'number' && o.format > SAVE_FORMAT) return initialRequests()
-  const rs = normalizeRequests({ list: o.list, seq: o.seq, filled: o.filled })
-  return { ...rs, list: rs.list.filter(r => r.status !== 'pending').map(r => (r.status === 'in_progress' ? { ...r, status: 'interrupted' as const } : r)) }
+  const rs = normalizeRequests({ list: o.list, subtasks: o.subtasks, seq: o.seq, filled: o.filled })
+  const cut = <T extends { status: RequestStatus }>(x: T): T => (x.status === 'in_progress' || x.status === 'pending' ? { ...x, status: 'interrupted' as const } : x)
+  return { ...rs, list: rs.list.filter(r => r.status !== 'pending').map(cut), subtasks: rs.subtasks.map(cut) }
 }
