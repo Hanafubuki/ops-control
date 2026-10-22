@@ -55,3 +55,17 @@ export function historyEta(rs: Requests, now: number, earlier: readonly number[]
   if (past.length < MIN_PAST || !longer.length) return { kind: 'unknown' }
   return { kind: 'left', ms: longer[Math.floor(longer.length / 2)]! - ran, from: 'history' }
 }
+
+// The request at work keeps the first guess the work bar gave it, so it can be set against how long it really
+// worked. A guess from past requests gives way once to the first one from the request's own milestones: that one
+// knows the work itself. Slash commands are not timed.
+export function noteEta(rs: Requests, now: number, earlier: readonly number[] = []): Requests {
+  const cur = rs.active ? rs.list.find(r => r.id === rs.active) : undefined
+  if (!cur || cur.command || (cur.eta && cur.eta.from !== 'history')) return rs
+  const own = cur.milestones.length ? eta(cur.milestones, now) : undefined
+  const guess = own?.kind === 'left' ? own : cur.eta ? undefined : historyEta(rs, now, earlier)
+  if (guess?.kind !== 'left') return rs
+  const after = Math.round(workedMs(cur, rs, now))
+  const noted = { ms: after + Math.round(guess.ms), after, ...(guess.from && { from: guess.from }) }
+  return { ...rs, list: rs.list.map(r => (r === cur ? { ...r, eta: noted } : r)) }
+}

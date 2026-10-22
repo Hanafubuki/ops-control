@@ -19,6 +19,9 @@ export type RequestQuestion = { question: string; answer?: string }
 // A call that needs a look: one that failed (repeats of the same call count as tries of one), or one refused (a
 // hook, a policy or the person said no). A later call of the same kind on the same thing that works fixes it.
 export type RequestIssue = { kind: 'failed' | 'refused'; sig: string; title: string; reason?: string; attempts: number; fixed?: true }
+// The work bar's time-left guess, kept to set against how long the request really worked: ms is the whole work it
+// guessed (worked so far plus the time left), after how long the request had worked when it guessed (eta.ts noteEta).
+export type RequestEta = { ms: number; after: number; from?: 'history' }
 export type Request = {
   id: string
   n: number
@@ -51,6 +54,7 @@ export type Request = {
   issues: RequestIssue[]
   // what the last answer leaves to the person: the questions it puts and the steps it names for them
   followUps?: FollowUps
+  eta?: RequestEta
 }
 export type FollowUps = { questions: string[]; actions: string[] }
 export type Requests = {
@@ -485,6 +489,7 @@ function readRequest(raw: unknown): Request | undefined {
         actions: arr(obj(o.followUps).actions).filter((x): x is string => typeof x === 'string').slice(0, MAX_FOLLOW_UPS),
       },
     }),
+    ...(num(obj(o.eta).ms) > 0 && { eta: { ms: num(obj(o.eta).ms), after: num(obj(o.eta).after), ...(obj(o.eta).from === 'history' && { from: 'history' as const }) } }),
   }
 }
 

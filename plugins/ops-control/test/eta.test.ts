@@ -1,5 +1,6 @@
 import { test, expect } from 'claude-code/testing'
-import { eta, historyEta, savedDurations } from '../hooks/eta.ts'
+import { eta, historyEta, noteEta, savedDurations } from '../hooks/eta.ts'
+import { tabParts } from '../hooks/pane.tsx'
 import { instrumentRow, workOf, type WorkInput } from '../hooks/workbar.ts'
 import { initialModel, applyEvent } from '../hooks/model.ts'
 import { resolveTheme } from '../hooks/themes.ts'
@@ -110,4 +111,34 @@ test('earlier sessions\' requests count too, so a new session has a guess from i
   const fresh = session([], 0)
   expect(historyEta(fresh, MIN)).toEqual({ kind: 'unknown' })
   expect(historyEta(fresh, MIN, savedDurations(file))).toEqual({ kind: 'left', ms: 4 * MIN, from: 'history' })
+})
+
+test('a request keeps the first guess from past requests, then once the first from its own milestones', () => {
+  let rs = noteEta(session([2, 4, 6, 10], 100 * MIN), 100 * MIN)
+  // at the start: of 2, 4, 6 and 10 the middle of the longer ones is 6
+  expect(rs.list.at(-1)!.eta).toEqual({ ms: 6 * MIN, after: 0, from: 'history' })
+  // a later guess from the past does not move it
+  expect(noteEta(rs, 103 * MIN).list.at(-1)!.eta).toEqual({ ms: 6 * MIN, after: 0, from: 'history' })
+  const call = (at: number, milestones: Milestone[]) => { rs = noteEta(toolEnd(rs, { at, tool: 'mcp__ops-control__milestones', toolUseId: `u${at}`, input: { milestones }, isError: false, text: '' }), at) }
+  call(100 * MIN, [{ title: 'A', status: 'in_progress' }, { title: 'B', status: 'pending' }])
+  call(102 * MIN, [{ title: 'A', status: 'completed' }, { title: 'B', status: 'in_progress' }])
+  // 2m worked, pace 2m and B just started: 4m in all
+  expect(rs.list.at(-1)!.eta).toEqual({ ms: 4 * MIN, after: 2 * MIN })
+  call(103 * MIN, [{ title: 'A', status: 'completed' }, { title: 'B', status: 'completed' }, { title: 'C', status: 'in_progress' }])
+  expect(rs.list.at(-1)!.eta).toEqual({ ms: 4 * MIN, after: 2 * MIN })
+  // it survives a save, and the Plan tab sets it against how long the request worked
+  rs = endTurn(rs, { turnId: 'now', answer: 'done', reason: 'answer', durationMs: 7 * MIN, at: 107 * MIN })
+  const back = loadSaved(JSON.parse(JSON.stringify(saved(rs))))
+  expect(back.list.at(-1)!.eta).toEqual({ ms: 4 * MIN, after: 2 * MIN })
+  const r = back.list.at(-1)!
+  const detail = text(tabParts(initialModel(), T, { tab: 'plan', request: r.id }, 90, false, 108 * MIN, 200, 'round', back).rows.flat())
+  expect(detail).toContain('~4m guessed after 2m 00s · took 7m 00s · 3m 00s over')
+  expect(text(tabParts(initialModel(), T, { tab: 'plan' }, 90, false, 108 * MIN, 200, 'round', back).rows.flat())).toContain('7m 00s / ~4m')
+})
+
+test('no guess is kept for a slash command, or while none can be made', () => {
+  let rs = submit(initialRequests(), { text: '/compact', at: 0, command: true }).rs
+  rs = startTurn(rs, { turnId: 't', text: 'compact', at: 0 })
+  expect(noteEta(rs, MIN, [MIN, 2 * MIN, 3 * MIN]).list[0]!.eta).toBeUndefined()
+  expect(noteEta(session([], 0), MIN).list[0]!.eta).toBeUndefined()
 })

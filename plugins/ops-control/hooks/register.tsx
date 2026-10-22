@@ -35,7 +35,7 @@ import { tierFor } from './layout.tsx'
 import { renderBand, renderWorkBar } from './band.tsx'
 import { MILESTONES_SPEC, otherOffers, policy, recorded } from './milestones.ts'
 import { agentWork, workIssues, workOf } from './workbar.ts'
-import { MAX_EARLIER, historyEta, savedDurations } from './eta.ts'
+import { MAX_EARLIER, historyEta, noteEta, savedDurations } from './eta.ts'
 import { NO_SWITCHES, isSource, offNote, readGuardrails, readSwitches, toggle, verdictFor, type GuardSwitches } from './guardrails.ts'
 import { renderPane, bubbleBox, petStripCols, visibleTabs, COVER_COLS, type PaneExtra, type PaneView, type TabId } from './pane.tsx'
 import { spinnerWord, newTurnWord } from './restyle.ts'
@@ -165,6 +165,9 @@ const refreshQueue = serial()
 let sessionId = ''
 // off: another ops-control copy is acting in this session (hooks/instances.ts)
 let off = false
+// False while session.start loads the saved look, pack and setup: the render hooks leave every row to the engine
+// meanwhile, so a new session never draws ops-control's built-in defaults first and then switches to the person's own.
+let ready = true
 let guardSid = '', guardRoot = ''
 let takenOver = false
 let fields: readonly FieldToken[] = DEFAULT_FIELDS
@@ -1714,6 +1717,11 @@ async function loadSettings($: Engine, host: Host, undo = false) {
   outfitChoice = parseOutfitStore(await host.storeGet('outfit'))
   const storedBubbles = await host.storeGet('bubbles')
   bubbles = BUBBLES.includes(storedBubbles as BubbleSetting) ? storedBubbles as BubbleSetting : BUBBLES.includes(pluginOptions.bubbles as BubbleSetting) ? pluginOptions.bubbles as BubbleSetting : 'on'
+  // the pack's character before the look: resolving the look writes the Sidequest board's icon, which shows it
+  userNamePacks = await loadPackFiles(host).catch(() => [])
+  const storedPack = await host.storeGet('namepack')
+  namePackId = typeof storedPack === 'string' && allPacks().some(p => p.id === storedPack) ? storedPack : DEFAULT_NAME_PACK
+  await loadPackPet(host)
   await loadLook($)
   const motion = await host.storeGet('reducedMotion')
   reducedMotion = typeof motion === 'boolean' ? motion : pluginOptions.reducedMotion === true
@@ -1726,10 +1734,6 @@ async function loadSettings($: Engine, host: Host, undo = false) {
   if (!undo || !setup.tabs.includes(view.tab)) view = { ...view, tab: setup.tabs[0]! }
   if (parsed.notices.length && !undo) $.ui.toast(`ops-control setup: ${parsed.notices.join('; ')}`)
   petShown = (await host.storeGet('petShown')) !== false
-  userNamePacks = await loadPackFiles(host).catch(() => [])
-  const storedPack = await host.storeGet('namepack')
-  namePackId = typeof storedPack === 'string' && allPacks().some(p => p.id === storedPack) ? storedPack : DEFAULT_NAME_PACK
-  await loadPackPet(host)
 }
 
 // The pack's character, when it has one: a built-in sheet, or a pet installed under <config>/ops-control/pets.
@@ -1914,6 +1918,7 @@ export const register: Register = (on, options) => {
   })
 
   on('session.start', async ($, e, next) => {
+    ready = false
     cwd = e.cwd
     interactive = e.isInteractive
     red = false
@@ -1958,7 +1963,7 @@ export const register: Register = (on, options) => {
       await host.storeSet('carried', true)
       if (copied && e.isInteractive) $.ui.toast(`Ops Control brought ${copied} of your files over from ~/.claude/glowup.`)
     }
-    await loadSettings($, host)
+    try { await loadSettings($, host) } finally { ready = true; relook($) }
     await offerMilestones($)
     if (e.isInteractive) void startMusic($)
     sessionId = await $.session.id()
@@ -2038,7 +2043,7 @@ export const register: Register = (on, options) => {
       feed($, { type: 'agent-bind', toolUseId: '', agentId: e.agentId, at: Date.now(), name: fork ? 'fork' : 'agent', task, ...(fork && { fork: true as const }) })
     }
     if (!e.agentId) {
-      setRequests($, startTurn(requests, { turnId: e.turnId, text: e.text, at: Date.now() }))
+      setRequests($, noteEta(startTurn(requests, { turnId: e.turnId, text: e.text, at: Date.now() }), Date.now(), earlierMs))
       // the newest request is the top row: a list scrolled down comes back up to it
       if (view.tab === 'plan' && !view.request && view.offset) { view = { ...view, offset: 0 }; publish($) }
     }
@@ -2087,7 +2092,7 @@ export const register: Register = (on, options) => {
       writeType,
     })
     // after the feed, so a TaskCreate's task is in the plan with its title
-    setRequests($, requestWork(requests, { at: Date.now(), tool: e.tool, toolUseId, agentId: e.agentId, input, isError, text, resultTaskId, writeType, ...(denied && { denied }) }, model.plan), true)
+    setRequests($, noteEta(requestWork(requests, { at: Date.now(), tool: e.tool, toolUseId, agentId: e.agentId, input, isError, text, resultTaskId, writeType, ...(denied && { denied }) }, model.plan), Date.now(), earlierMs), true)
     if (!denied && !ran.isError && !e.agentId && e.tool === 'Bash' && typeof input.command === 'string') turnGain.commits += countCommits(input.command)
     if (!e.agentId && model.lastTest?.at === endAt && !model.lastTest.passed) {
       failed = true
@@ -2253,7 +2258,7 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (off) return next(e)
+    if (off || !ready) return next(e)
     if (e.props.hasSurvey) return next(e)
     const viewed = e.props.view.agentId
     if (viewed) {
@@ -2302,7 +2307,7 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: 'ops-control' }, async ($, e, next) => {
-    if (off) return next(e)
+    if (off || !ready) return next(e)
     // The pane is usually closed at session start, so the hello waits for the first draw.
     if (helloDue && !bubble) { helloDue = false; $.clock.after(0, () => void say($, 'hello', {})) }
     // a render hook cannot write state: publish after the draw
@@ -2419,7 +2424,7 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PLAYER_ID }, async ($, e, next) => {
-    if (off) return next(e)
+    if (off || !ready) return next(e)
     // read through the PANE key so every publish redraws the dialog too
     const live = (await $.state.get(PANE)).value as { model: Model } | undefined
     const m = live ? normalizeModel(live.model) : model
@@ -2469,7 +2474,7 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'Pane', requestId: CONFIG_ID }, async ($, e, next) => {
-    if (off) return next(e)
+    if (off || !ready) return next(e)
     const els = $.ui.resolve(e) as any
     const s = configState()
     const link = encodeLink({ pack: exportMix(look, exportName(mix.colors)), setup })
@@ -2522,7 +2527,7 @@ export const register: Register = (on, options) => {
 
   // While a turn runs, the spinner under the transcript draws the bottom edge of the reply box still open.
   on('ui.render', { component: 'Spinner' }, async ($, e, next) => {
-    if (off) return next(e)
+    if (off || !ready) return next(e)
     const spinner = await spinnerRow($, e, next)
     if (e.surface !== 'terminal' || !frames.isOpen()) return spinner
     const els = $.ui.resolve(e)
@@ -2530,7 +2535,7 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
-    if (off) return next(e)
+    if (off || !ready) return next(e)
     const row = await next(e)
     if (e.surface !== 'terminal') return row
     const p = e.props
@@ -2559,7 +2564,7 @@ export const register: Register = (on, options) => {
     )
   })
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
-    if (off) return next(e)
+    if (off || !ready) return next(e)
     const row = await next(e)
     if (e.surface !== 'terminal') return row
     const conclusion = e.props.isFirstOfReply && isFinalAnswer(e.props.text)
@@ -2568,7 +2573,7 @@ export const register: Register = (on, options) => {
     return styleRow($.ui.resolve(e), look, { site: 'AssistantMessage', isFirstOfReply: e.props.isFirstOfReply, xp: xpFor(e.requestId, e.props.isFirstOfReply), ...(conclusion && { conclusion }), frame }, row) as RenderElement
   })
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
-    if (off) return next(e)
+    if (off || !ready) return next(e)
     const row = await next(e)
     if (e.surface !== 'terminal') return row
     const p = e.props
@@ -2580,7 +2585,7 @@ export const register: Register = (on, options) => {
     return styleRow($.ui.resolve(e), look, { site: 'ToolUse', tool: p.tool, input: p.input, isRunning: p.isRunning, isErrored: p.isErrored, isInterrupted: p.isInterrupted, seq: turns.toolSeq(e.requestId), frame, ...(changes && { changes }) }, row, { toolUseId: e.requestId }) as RenderElement
   })
   on('ui.render', { component: 'ToolResult' }, async ($, e, next) => {
-    if (off) return next(e)
+    if (off || !ready) return next(e)
     const row = await next(e)
     if (e.surface !== 'terminal') return row
     const p = e.props
@@ -2592,7 +2597,7 @@ export const register: Register = (on, options) => {
   // drawn by the engine; the turn's duration line closes the box.
   for (const component of ['ToolGroup', 'InfoNotice', 'ToolProgress'] as const) {
     on('ui.render', { component }, async ($, e, next) => {
-      if (off) return next(e)
+      if (off || !ready) return next(e)
       const row = await next(e)
       if (e.surface !== 'terminal' || (e.props as { isExpanded?: boolean }).isExpanded) return row
       const calls = e.component === 'ToolGroup' ? e.props.calls.flatMap(call => (call.tool_use_id ? [call.tool_use_id] : [])) : []
@@ -2602,7 +2607,7 @@ export const register: Register = (on, options) => {
     })
   }
   on('ui.render', { component: 'TurnDuration' }, async ($, e, next) => {
-    if (off) return next(e)
+    if (off || !ready) return next(e)
     const row = await next(e)
     if (e.surface !== 'terminal') return row
     const frame = frames.closer(`TurnDuration:${e.requestId}`)
@@ -2611,7 +2616,7 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'CommandOutput' }, async ($, e, next) => {
-    if (off) return next(e)
+    if (off || !ready) return next(e)
     const p = e.props
     if ((e.surface !== 'terminal' && e.surface !== 'desktop') || p.command !== 'ops' || p.isErrored) return next(e)
     // Matched on the exact text the command printed, so an error or a changed answer stays the engine's row.

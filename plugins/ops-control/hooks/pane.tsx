@@ -19,6 +19,7 @@ import { coverPlaceholder } from './music/art.ts'
 import type { MusicCaps } from './music/reader.ts'
 import { currentMilestone, openIssues, requestTitle, workedMs, type Milestone, type MilestoneStatus, type Request, type Requests, type RequestStatus } from './requests.ts'
 import { markdownRows, wrapSegs } from './mdrows.ts'
+import { countdown } from './workbar.ts'
 import type { GuardSwitches, Guardrails } from './guardrails.ts'
 import { guardrailRows } from './guardrailstab.ts'
 import { loadRows, type SysLoad } from './sysload.ts'
@@ -477,7 +478,16 @@ function requestRow(r: Request, rs: Requests, m: Model, t: Theme, w: number, lea
   const { steps } = stepsOf(r, rs, m)
   const progress = steps.length ? `${steps.filter(x => x.status === 'completed').length}/${steps.length} · ` : ''
   const issues = openIssues(r).length
-  return spread(left, [...(issues ? [{ text: `▲${issues} `, color: c.edit }] : []), { text: r.status === 'pending' ? 'queued' : progress + duration(workedMs(r, rs, now)), color: c.dim }], w, t)
+  return spread(left, [...(issues ? [{ text: `▲${issues} `, color: c.edit }] : []), { text: r.status === 'pending' ? 'queued' : progress + duration(workedMs(r, rs, now)) + (r.eta ? ` / ~${countdown(r.eta.ms)}` : ''), color: c.dim }], w, t)
+}
+
+// The guess the work bar gave the request, set against how long it worked: so far while it runs, in all once it ended.
+function etaSegs(r: Request, rs: Requests, t: Theme, now: number): Seg[] {
+  const c = t.colors, e = r.eta!, worked = workedMs(r, rs, now)
+  const segs: Seg[] = [{ text: `~${countdown(e.ms)}`, color: c.text, bold: true }, { text: ` guessed after ${duration(e.after)}${e.from === 'history' ? ' from past requests' : ''}`, color: c.dim }]
+  if (r.status === 'in_progress' || r.status === 'pending') return [...segs, { text: ` · ${duration(worked)} so far`, color: c.dim }]
+  const off = worked - e.ms
+  return [...segs, { text: ` · took ${duration(worked)}`, color: c.text }, { text: ` · ${duration(Math.abs(off))} ${off > 0 ? 'over' : 'under'}`, color: off > 0 ? c.edit : c.pass }]
 }
 
 // A path inside the project is shown from its root; another one by its last three parts.
@@ -535,6 +545,7 @@ function requestDetail(r: Request, rs: Requests, m: Model, t: Theme, w: number, 
   const open = openIssues(r)
   const flagged = open.length ? [{ text: ` · ▲ ${plural(open.length, 'issue')}`, color: c.edit, bold: true }] : []
   body.push([], ...field('Status', [{ text: `${REQUEST_MARK[r.status]} ${REQUEST_WORD[r.status]}`, color: requestColor(r.status, t), bold: true }, { text: ` · ${duration(workedMs(r, rs, now))}`, color: c.dim }, ...where_, ...flagged]))
+  if (r.eta) body.push(...field('ETA', etaSegs(r, rs, t, now)))
   const objective = r.objective ?? host?.objective
   body.push(...field('Objective', [{ text: objective ?? requestTitle(r), color: objective ? c.text : c.dim }]))
   if (at >= 0) {

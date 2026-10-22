@@ -11,10 +11,10 @@ const walk = (n: any, out: any[] = []): any[] => { if (typeof n === 'string') ou
 const petClient = (tree: any) => walk(tree).find(n => n?.type === 'Client' && String(n.props?.module).endsWith('client/pet.tsx'))
 const textOf = (tree: any) => walk(tree).filter(n => typeof n === 'string').join(' ')
 
-function base(on: any, store: Record<string, unknown>, toasts: string[] = []) {
+function base(on: any, store: Record<string, unknown>, toasts: string[] = [], files: Record<string, string> = {}, hold?: (key: string) => Promise<void>, wrote?: (path: string) => void) {
   store.eggs ??= { passRuns: 1, eggAt: 1, eggRuns: 0 }
-  fakeFs(on, {})
-  on('store.get', async (_$: unknown, e: any) => ({ value: store[e.key] }) as never)
+  fakeFs(on, files, undefined, {}, wrote)
+  on('store.get', async (_$: unknown, e: any) => { await hold?.(e.key); return { value: store[e.key] } as never })
   on('store.set', async (_$: unknown, e: any) => { store[e.key] = e.value; return { value: undefined } as never })
   on('store.delete', async (_$: unknown, e: any) => { delete store[e.key]; return { value: undefined } as never })
   on('store.keys', async () => ({ value: Object.keys(store) }) as never)
@@ -176,4 +176,33 @@ test('the message a finished turn answered with opens a box titled Conclusion; a
   expect(earlier).not.toContain('Conclusion')
   // arcade's border is bold: the top edge of the reply box
   expect(earlier.some(t => /^━+$/.test(t))).toBe(true)
+})
+
+test('a new session writes the stored pack\'s character for the Sidequest board first, never the default', async ($, on) => {
+  const store: Record<string, unknown> = { namepack: 'code-geass' }, files: Record<string, string> = {}
+  const board = '/fake/.claude/ops-control/board/character.json'
+  const seen: string[] = []
+  // fakeFs calls `wrote` before it stores the text: the write before it is the one on disk then
+  base(on, store, [], files, undefined, path => { if (path === board && files[board]) seen.push(JSON.parse(files[board]!).name) })
+  await start($)
+  for (let i = 0; i < 5 && !files[board]; i++) await new Promise(r => setTimeout(r, 0))
+  seen.push(JSON.parse(files[board]!).name)
+  expect(seen).toEqual(['lelouch'])
+})
+
+test('while the session starts the pane is the engine\'s own, then it is drawn in the saved look', async ($, on) => {
+  // the saved look's read is held open, as a slow disk would
+  let release = () => {}, entered = () => {}
+  const held = new Promise<void>(r => { release = r }), reading = new Promise<void>(r => { entered = r })
+  base(on, {}, [], {}, async key => { if (key === 'mix') { entered(); await held } })
+  const starting = start($)
+  await reading
+  const early = await mount($)
+  expect(textOf(await early.drawn())).toBe('engine row')
+  await early.unmount()
+  release()
+  await starting
+  const pane = await mount($)
+  expect(textOf(await pane.drawn())).not.toBe('engine row')
+  await pane.unmount()
 })

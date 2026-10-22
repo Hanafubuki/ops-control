@@ -49,6 +49,7 @@ How it is wired, in `~/.claude/keybindings.json`:
 - **Issues** are tool calls that failed and haven't been fixed yet, or were refused. Ones fixed later are listed as fixed.
 - Requests made before Ops Control loaded (a reload, a resumed session) are read back from the session's transcript.
 - A prompt you send while Claude is busy with another request shows that request's milestones.
+- **ETA vs. actual** (new): each request keeps the first time-left guess the work bar gave it (a guess from past requests is replaced once by the first one from the request's own milestones). The row shows `worked / ~guess`; the detail shows `ETA ~20m guessed after 1m 05s · took 25m 10s · 5m 10s over`. It is saved with the session's requests, so resumed and earlier sessions keep it.
 
 ### Context tab
 - Context bar split by what fills the window, a chart over the session, turns left before auto-compact, and the heaviest sources you can trim.
