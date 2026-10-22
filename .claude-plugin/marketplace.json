@@ -5,13 +5,13 @@
     "url": "https://github.com/Hanafubuki"
   },
   "description": "Ops Control for Claude Code, with the Sidequest work board and prismantis rendering.",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "plugins": [
     {
       "name": "ops-control",
       "source": "./plugins/ops-control",
       "description": "A cockpit pane for plan, context, guardrails, agents, diff, music and settings; a work bar over the prompt with milestones and context; name packs and pets; keyboard navigation (Alt+1-7, arrows).",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "author": { "name": "Hanafubuki", "url": "https://github.com/Hanafubuki" },
       "homepage": "https://github.com/Hanafubuki/ops-control/tree/main/plugins/ops-control",
       "license": "MIT",

@@ -2,6 +2,10 @@
 
 Releases of the ops-control marketplace. Version numbers follow [semantic versioning](https://semver.org); each release is a git tag.
 
+## [1.0.5] - 2026-10-22
+
+- Ops Control: each request keeps its ETA (first work-bar guess) to set against how long it took, shown in the Plan tab; a new session draws nothing of its own until the saved look and pack are loaded, and the Sidequest board icon is the pack's character from the first write
+
 ## [1.0.4] - 2026-10-21
 
 - Ops Control: /rename sends the new name to Sidequest at once (rebuilds the Claude sessions page, retags the session's /stask tickets)
